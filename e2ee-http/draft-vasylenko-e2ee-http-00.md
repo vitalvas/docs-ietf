@@ -3,9 +3,9 @@ title: "End-to-End Encryption for HTTP APIs Using X25519 and AES-GCM"
 abbrev: "E2EE HTTP"
 docname: draft-vasylenko-e2ee-http-00
 category: exp
+submissiontype: IETF
 ipr: trust200902
 area: Security
-workgroup: Independent Submission
 keyword:
   - end-to-end encryption
   - X25519
@@ -23,8 +23,6 @@ author:
     email: ietf@vitalvas.com
 
 normative:
-  RFC2119:
-  RFC8174:
   RFC7748:
   RFC5869:
   RFC8615:
@@ -50,6 +48,7 @@ normative:
       NIST: Special Publication 800-38D
 
 informative:
+  RFC6973:
   RFC9000:
   VASYLENKO-BLOG:
     title: "End-to-End Encryption for APIs: X25519 and AES"
@@ -144,7 +143,7 @@ Fingerprint:
 The protocol has three phases: key discovery, key agreement, and
 authenticated message exchange.
 
-~~~ aasvg
+~~~
 +---------+                                    +---------+
 | Client  |                                    | Server  |
 +----+----+                                    +----+----+
@@ -543,13 +542,13 @@ In the ABNF of {{RFC9651}}, the field value is an `sf-item`:
 The Item value is a String holding the `kid`. The following parameters
 are defined:
 
-| Name  | Type          | Request | Response | Meaning                                |
-|:------|:--------------|:--------|:---------|:---------------------------------------|
-| aead  | String        | yes     | yes      | AEAD Identifier (see {{aead-ids}}).    |
-| epk   | Byte Sequence | yes     | no       | Client ephemeral X25519 public key.    |
-| ts    | Integer       | yes     | yes      | Seconds since Unix epoch.              |
-| nid   | String        | yes     | yes      | Per-message replay identifier (e.g. UUID). |
-| cty   | String        | no      | no       | Media type of the inner plaintext (see {{cty}}). |
+| Name  | Type          | Request    | Response   | Meaning                                |
+|:------|:--------------|:-----------|:-----------|:---------------------------------------|
+| aead  | String        | required   | required   | AEAD Identifier (see {{aead-ids}}).    |
+| epk   | Byte Sequence | required   | prohibited | Client ephemeral X25519 public key.    |
+| ts    | Integer       | required   | required   | Seconds since Unix epoch.              |
+| nid   | String        | required   | required   | Per-message replay identifier (e.g. UUID). |
+| cty   | String        | optional   | optional   | Media type of the inner plaintext (see {{cty}}). |
 
 `epk` is the raw 32-octet X25519 public key carried as a Structured
 Fields Byte Sequence (RFC 9651 base64, sf-binary, delimited by `:`),
@@ -603,7 +602,7 @@ outer `Content-Type` of `application/e2ee` and an inner `cty` MUST use
 
     E2EE-Session: "2026-06"; \
                 aead="AES-256-GCM"; \
-                epk=:qg7lN...32 octets base64...=:; \
+                epk=:rUOL+uMfbAk9YdQzklXqeYCSyfrdB7l4J/Swrp3ufBw=:; \
                 ts=1781006400; \
                 nid="3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21"; \
                 cty="application/json"
@@ -797,7 +796,11 @@ Security considerations:
 : See {{security}}.
 
 Interoperability considerations:
-: N/A
+: Implementations need to parse the `E2EE-Session` Structured Field and
+  process the binary `nonce || ciphertext || tag` envelope defined by
+  this document. Interoperability depends on agreement on the selected
+  AEAD Identifier, the key set entry referenced by `kid`, and the AAD
+  construction rules in {{aad}}.
 
 Published specification:
 : This document.
@@ -819,10 +822,12 @@ Person and email address to contact for further information:
 : See the Authors' Addresses section.
 
 Intended usage:
-: COMMON
+: LIMITED USE
 
 Restrictions on usage:
-: N/A
+: This media type is intended for HTTP request and response payloads that
+  use the encrypted envelope defined by this document. It is not a
+  general-purpose stored file format.
 
 Author:
 : See the Authors' Addresses section.
@@ -847,7 +852,8 @@ Sub-namespace for Registered Protocol Parameter Identifiers" registry:
 
 - Registered Parameter Identifier: `e2ee`
 - Reference: This document
-- IANA Registry Reference: None
+- IANA Registry Reference: E2EE Error Codes registry, created by this
+  document
 
 The registration policy for this registry is IETF Review {{RFC8126}},
 as specified for the `urn:ietf:params` namespace by {{RFC3553}}.
@@ -861,13 +867,39 @@ Specification:
 : This document.
 
 Repository:
-: The problem type codes defined in {{errors}}.
+: The E2EE Error Codes registry created by this document.
 
 Index value:
 : A problem type URI has the form `urn:ietf:params:e2ee:error:<code>`,
-  where `<code>` is one of the fixed lowercase ASCII error codes defined
-  in {{errors}}. No transformation or canonicalization is applied.
+  where `<code>` is a lowercase ASCII error code registered in the E2EE
+  Error Codes registry. No transformation or canonicalization is applied.
   Comparison is by exact string match.
+
+## E2EE Error Codes
+
+IANA is requested to create the "E2EE Error Codes" registry. The
+registration policy is Specification Required {{RFC8126}}.
+
+Error codes are ASCII strings that MUST contain between 1 and 64
+characters and MUST match the regular expression
+`^[a-z][a-z0-9_]{0,63}$`. New registrations MUST provide:
+
+- Error code
+- HTTP status code
+- Description
+- Reference
+
+The initial contents of the registry are:
+
+| Error code        | HTTP status | Description                              | Reference       |
+|:------------------|:------------|:-----------------------------------------|:----------------|
+| key_unknown       | 400         | Key identifier is not recognized.        | This document   |
+| key_expired       | 400         | Key identifier is outside its validity.  | This document   |
+| aead_unsupported  | 400         | AEAD identifier is not supported.        | This document   |
+| decrypt_failed    | 400         | AEAD authentication failed.              | This document   |
+| timestamp_skew    | 400         | Timestamp is outside the accepted window. | This document   |
+| replay_detected   | 425         | Replay identifier was already observed.  | This document   |
+| malformed         | 400         | Protocol metadata or body is malformed.  | This document   |
 
 # Security Considerations {#security}
 
@@ -1068,6 +1100,31 @@ This scheme is complementary to, and not a replacement for, alternatives
 such as mTLS or QUIC {{RFC9000}}. It is specifically targeted at
 deployments where TLS-terminating intermediaries are part of the
 application architecture and removing them is not feasible.
+
+# Privacy Considerations
+
+This protocol improves payload confidentiality from the perspective of
+TLS-terminating intermediaries, but it does not hide HTTP metadata.
+Intermediaries can still observe the client and server endpoints, request
+timing, request method, target URI, status code, message sizes, and all
+unprotected HTTP fields. Applications that carry privacy-sensitive values
+in URIs or unprotected headers will still expose those values.
+
+The `E2EE-Session` field is also visible to intermediaries. Its `kid`,
+`aead`, `ts`, `nid`, `epk`, and `cty` parameters can reveal deployment
+state, timing, retry behavior, client session scope, and the media type
+of the inner plaintext. Clients that need to reduce linkability SHOULD
+use the default per-request client key scope and generate fresh `nid`
+values for every request.
+
+Plaintext error responses expose protocol failure information, as
+described in {{plaintext-errors}}. Deployments SHOULD avoid putting
+user-specific or content-derived information in error details and SHOULD
+carry application-specific error information inside encrypted response
+payloads when feasible.
+
+These considerations are intended to supplement the privacy guidance in
+{{RFC6973}}.
 
 --- back
 

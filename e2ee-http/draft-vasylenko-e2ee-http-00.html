@@ -1,0 +1,3378 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>End-to-End Encryption for HTTP APIs Using X25519 and AES-GCM</title>
+<meta content="Vitaliy Vasylenko" name="author">
+<meta content="
+       This document specifies an application-layer end-to-end encryption (E2EE)
+scheme for HTTP APIs. The scheme uses X25519 Elliptic Curve Diffie-Hellman
+(ECDH) for key agreement, HKDF-SHA256 for key derivation, and AES-GCM
+(with 128-, 192-, or 256-bit keys) for authenticated encryption of
+request and response payloads. Server public keys are discovered through
+a Well-Known URI and authenticated either by TLS or by a stronger
+out-of-band trust mechanism, depending on the deployment threat model.
+The scheme is designed to provide confidentiality and integrity of
+payloads independent of, and in addition to, transport-layer security
+such as TLS. It provides replay protection and key rotation. 
+    " name="description">
+<meta content="xml2rfc 3.33.0" name="generator">
+<meta content="end-to-end encryption" name="keyword">
+<meta content="X25519" name="keyword">
+<meta content="AES-GCM" name="keyword">
+<meta content="HKDF" name="keyword">
+<meta content="HTTP API" name="keyword">
+<meta content="draft-vasylenko-e2ee-http-00" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.33.0
+    Python 3.14.5
+    ConfigArgParse 1.7.5
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.1.0
+    platformdirs 4.9.6
+    pycountry 26.2.16
+    PyYAML 6.0.3
+    requests 2.34.1
+    wcwidth 0.7.0
+-->
+<link href="draft-vasylenko-e2ee-http-00.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">/*
+
+  NOTE: Changes at the bottom of this file overrides some earlier settings.
+
+  Once the style has stabilized and has been adopted as an official RFC style,
+  this can be consolidated so that style settings occur only in one place, but
+  for now the contents of this file consists first of the initial CSS work as
+  provided to the RFC Formatter (xml2rfc) work, followed by itemized and
+  commented changes found necessary during the development of the v3
+  formatters.
+
+*/
+
+/* fonts */
+@import url('https://static.ietf.org/fonts/noto-sans/import.css'); /* Sans-serif */
+@import url('https://static.ietf.org/fonts/noto-serif/import.css'); /* Serif (print) */
+@import url('https://static.ietf.org/fonts/roboto-mono/import.css'); /* Monospace */
+
+:root {
+  --font-sans: 'Noto Sans', Arial, Helvetica, sans-serif;
+  --font-serif: 'Noto Serif', 'Times', 'Times New Roman', serif;
+  --font-mono: 'Roboto Mono', Courier, 'Courier New', monospace;
+}
+
+@viewport {
+  zoom: 1.0;
+}
+@-ms-viewport {
+  width: extend-to-zoom;
+  zoom: 1.0;
+}
+/* general and mobile first */
+html {
+}
+body {
+  max-width: 90%;
+  margin: 1.5em auto;
+  color: #222;
+  background-color: #fff;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  scroll-behavior: smooth;
+  overflow-wrap: break-word;
+}
+.ears {
+  display: none;
+}
+
+/* headings */
+#title, h1, h2, h3, h4, h5, h6 {
+  margin: 1em 0 0.5em;
+  font-weight: bold;
+  line-height: 1.3;
+}
+#title {
+  clear: both;
+  border-bottom: 1px solid #ddd;
+  margin: 0 0 0.5em 0;
+  padding: 1em 0 0.5em;
+}
+.author {
+  padding-bottom: 4px;
+}
+h1 {
+  font-size: 26px;
+  margin: 1em 0;
+}
+h2 {
+  font-size: 22px;
+  margin-top: -20px;  /* provide offset for in-page anchors */
+  padding-top: 33px;
+}
+h3 {
+  font-size: 18px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h4 {
+  font-size: 16px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h5, h6 {
+  font-size: 14px;
+}
+#n-copyright-notice {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 1em;
+  margin-bottom: 1em;
+}
+/* general structure */
+p {
+  padding: 0;
+  margin: 0 0 1em 0;
+  text-align: left;
+}
+div, span {
+  position: relative;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+@media print {
+  svg {
+    max-height: 850px;
+    max-width: 660px;
+  }
+}
+svg[font-family~="serif" i], svg [font-family~="serif" i] {
+  font-family: var(--font-serif);
+}
+svg[font-family~="sans-serif" i], svg [font-family~="sans-serif" i] {
+  font-family: var(--font-sans);
+}
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  display: table;
+  border: none;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 1em 2em;
+}
+ol ol, ul ul, ol ul, ul ol {
+  margin-left: 1em;
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+.ulCompact li {
+  margin: 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+}
+ul.empty li, .ulEmpty li {
+  margin-top: 0.5em;
+}
+ul.ulBare, li.ulBare {
+  margin-left: 0em !important;
+}
+ul.compact, .ulCompact,
+ol.compact, .olCompact {
+  line-height: 100%;
+  margin: 0 0 0 2em;
+}
+
+/* definition lists */
+dl {
+}
+dl > dt {
+  float: left;
+  margin-right: 1em;
+}
+/* 
+dl.nohang > dt {
+  float: none;
+}
+*/
+dl > dd {
+  margin-bottom: .8em;
+  min-height: 1.3em;
+}
+dl.compact > dd, .dlCompact > dd {
+  margin-bottom: 0em;
+}
+dl > dd > dl {
+  margin-top: 0.5em;
+  margin-bottom: 0em;
+}
+
+/* links */
+a {
+  text-decoration: none;
+}
+a[href] {
+  color: #22e; /* Arlen: WCAG 2019 */
+}
+a[href]:hover {
+  background-color: #f2f2f2;
+}
+figcaption a[href],
+a[href].selfRef {
+  color: #222;
+}
+/* XXX probably not this:
+a.selfRef:hover {
+  background-color: transparent;
+  cursor: default;
+} */
+
+/* Figures */
+tt, code, pre {
+  background-color: #f9f9f9;
+  font-family: var(--font-mono);
+}
+pre {
+  border: 1px solid #eee;
+  margin: 0;
+  padding: 1em;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption {
+  font-style: italic;
+  margin: 0 0 1em 0;
+}
+@media screen {
+  pre {
+    overflow-x: auto;
+    max-width: 100%;
+    max-width: calc(100% - 22px);
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 1.2em 2em;
+}
+blockquote {
+  background-color: #f9f9f9;
+  color: #111; /* Arlen: WCAG 2019 */
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin: 1em 0;
+}
+blockquote > *:last-child {
+  margin-bottom: 0;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+.xref {
+  overflow-wrap: normal;
+}
+
+/* tables */
+table {
+  width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  border: 1px solid #eee;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5em 0.75em;
+}
+th {
+  text-align: left;
+  background-color: #e9e9e9;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f5f5f5;
+}
+table caption {
+  font-style: italic;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+table p {
+  /* XXX to avoid bottom margin on table row signifiers. If paragraphs should
+     be allowed within tables more generally, it would be far better to select on a class. */
+  margin: 0;
+}
+
+/* pilcrow */
+a.pilcrow {
+  color: #666; /* Arlen: AHDJ 2019 */
+  text-decoration: none;
+  visibility: hidden;
+  user-select: none;
+  -ms-user-select: none;
+  -o-user-select:none;
+  -moz-user-select: none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+@media screen {
+  aside:hover > a.pilcrow,
+  p:hover > a.pilcrow,
+  blockquote:hover > a.pilcrow,
+  div:hover > a.pilcrow,
+  li:hover > a.pilcrow,
+  pre:hover > a.pilcrow {
+    visibility: visible;
+  }
+  a.pilcrow:hover {
+    background-color: transparent;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid #eee;
+}
+.bcp14 {
+  font-variant: small-caps;
+}
+
+.role {
+  font-variant: all-small-caps;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: 0.9em;
+}
+#identifiers dt {
+  width: 3em;
+  clear: left;
+}
+#identifiers dd {
+  float: left;
+  margin-bottom: 0;
+}
+/* Fix PDF info block run off issue */
+@media print {
+  #identifiers dd {
+    max-width: 100%;
+  }
+}
+#identifiers .authors .author {
+  display: inline-block;
+  margin-right: 1.5em;
+}
+#identifiers .authors .org {
+  font-style: italic;
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #666; /* Arlen: WCAG 2019 */
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: left;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc  {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+}
+nav.toc ul {
+  margin: 0 0.5em 0 0;
+  padding: 0;
+  list-style: none;
+}
+nav.toc li {
+  line-height: 1.3em;
+  margin: 0.75em 0;
+  padding-left: 1.2em;
+  text-indent: -1.2em;
+}
+/* references */
+.references dt {
+  text-align: right;
+  font-weight: bold;
+  min-width: 7em;
+}
+.references dd {
+  margin-left: 8em;
+  overflow: auto;
+}
+
+.refInstance {
+  margin-bottom: 1.25em;
+}
+
+.refSubseries {
+  margin-bottom: 1.25em;
+}
+
+.references .ascii {
+  margin-bottom: 0.25em;
+}
+
+/* index */
+.index ul {
+  margin: 0 0 0 1em;
+  padding: 0;
+  list-style: none;
+}
+.index ul ul {
+  margin: 0;
+}
+.index li {
+  margin: 0;
+  text-indent: -2em;
+  padding-left: 2em;
+  padding-bottom: 5px;
+}
+.indexIndex {
+  margin: 0.5em 0 1em;
+}
+.index a {
+  font-weight: 700;
+}
+/* make the index two-column on all but the smallest screens */
+@media (min-width: 600px) {
+  .index ul {
+    -moz-column-count: 2;
+    -moz-column-gap: 20px;
+  }
+  .index ul ul {
+    -moz-column-count: 1;
+    -moz-column-gap: 0;
+  }
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  margin: 1em 0;
+}
+
+address.vcard .nameRole {
+  font-weight: 700;
+  margin-left: 0;
+}
+address.vcard .label {
+  font-family: var(--font-sans);
+  margin: 0.5em 0;
+}
+address.vcard .type {
+  display: none;
+}
+.alternative-contact {
+  margin: 1.5em 0 1em;
+}
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+
+/* temporary notes */
+.rfcEditorRemove::before {
+  position: absolute;
+  top: 0.2em;
+  right: 0.2em;
+  padding: 0.2em;
+  content: "The RFC Editor will remove this note";
+  color: #9e2a00; /* Arlen: WCAG 2019 */
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+}
+.rfcEditorRemove {
+  position: relative;
+  padding-top: 1.8em;
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  border-radius: 3px;
+}
+.cref {
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+/* alternative layout for smaller screens */
+@media screen and (max-width: 1023px) {
+  body {
+    padding-top: 2em;
+  }
+  #title {
+    padding: 1em 0;
+  }
+  h1 {
+    font-size: 24px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-top: -18px;  /* provide offset for in-page anchors */
+    padding-top: 38px;
+  }
+  #identifiers dd {
+    max-width: 60%;
+  }
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    background-color: inherit;
+    border-bottom: 1px solid #ccc;
+  }
+  #toc h2 {
+    margin: -1px 0 0 0;
+    padding: 4px 0 4px 6px;
+    padding-right: 1em;
+    min-width: 190px;
+    font-size: 1.1em;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+  }
+  #toc h2::before { /* css hamburger */
+    float: right;
+    position: relative;
+    width: 1em;
+    height: 1px;
+    left: -164px;
+    margin: 6px 0 0 0;
+    background: white none repeat scroll 0 0;
+    box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+    content: "";
+  }
+  #toc nav {
+    display: none;
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+}
+
+/* alternative layout for wide screens */
+@media screen and (min-width: 1024px) {
+  body {
+    max-width: 724px;
+    margin: 42px auto;
+    padding-left: 1.5em;
+    padding-right: 29em;
+  }
+  #toc {
+    position: fixed;
+    top: 42px;
+    right: 42px;
+    width: 25%;
+    margin: 0;
+    padding: 0 1em;
+    z-index: 1;
+  }
+  #toc h2 {
+    border-top: none;
+    border-bottom: 1px solid #ddd;
+    font-size: 1em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 0;
+    overflow: auto;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre {
+    page-break-inside: avoid;
+  }
+  figure {
+    overflow: scroll;
+  }
+  .breakable pre {
+    break-inside: auto;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  h2+*, h3+*, h4+*, h5+*, h6+* {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+/* This is commented out here, as the string-set: doesn't
+   pass W3C validation currently */
+/*
+.ears thead .left {
+  string-set: ears-top-left content();
+}
+
+.ears thead .center {
+  string-set: ears-top-center content();
+}
+
+.ears thead .right {
+  string-set: ears-top-right content();
+}
+
+.ears tfoot .left {
+  string-set: ears-bottom-left content();
+}
+
+.ears tfoot .center {
+  string-set: ears-bottom-center content();
+}
+
+.ears tfoot .right {
+  string-set: ears-bottom-right content();
+}
+*/
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+  /* The following is commented out here, but set appropriately by in code, as
+     the content depends on the document */
+  /*
+  @top-left {
+    content: 'Internet-Draft';
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-left {
+    content: string(ears-top-left);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-center {
+    content: string(ears-top-center);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-right {
+    content: string(ears-top-right);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @bottom-left {
+    content: string(ears-bottom-left);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-center {
+    content: string(ears-bottom-center);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-right {
+      content: '[Page ' counter(page) ']';
+      vertical-align: top;
+      border-top: solid 1px #ccc;
+  }
+  */
+
+}
+
+/* Changes introduced to fix issues found during implementation */
+/* Make sure links are clickable even if overlapped by following H* */
+a {
+  z-index: 2;
+}
+/* Separate body from document info even without intervening H1 */
+section {
+  clear: both;
+}
+
+
+/* Top align author divs, to avoid names without organization dropping level with org names */
+.author {
+  vertical-align: top;
+}
+
+/* Leave room in document info to show Internet-Draft on one line */
+#identifiers dt {
+  width: 8em;
+}
+
+/* Don't waste quite as much whitespace between label and value in doc info */
+#identifiers dd {
+  margin-left: 1em;
+}
+
+/* Give floating toc a background color (needed when it's a div inside section */
+#toc {
+  background-color: white;
+}
+
+/* Make the collapsed ToC header render white on gray also when it's a link */
+@media screen and (max-width: 1023px) {
+  #toc h2 a,
+  #toc h2 a:link,
+  #toc h2 a:focus,
+  #toc h2 a:hover,
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+}
+
+/* Give the bottom of the ToC some whitespace */
+@media screen and (min-width: 1024px) {
+  #toc {
+    padding: 0 0 1em 1em;
+  }
+}
+
+/* Style section numbers with more space between number and title */
+.section-number {
+  padding-right: 0.5em;
+}
+
+/* prevent monospace from becoming overly large */
+tt, code, pre {
+  font-size: 95%;
+}
+
+/* Fix the height/width aspect for ascii art*/
+.sourcecode pre,
+.art-text pre {
+  line-height: 1.12;
+}
+
+
+/* Add styling for a link in the ToC that points to the top of the document */
+a.toplink {
+  float: right;
+  margin-right: 0.5em;
+}
+
+/* Fix the dl styling to match the RFC 7992 attributes */
+dl > dt,
+dl.dlParallel > dt {
+  float: left;
+  margin-right: 1em;
+}
+dl.dlNewline > dt {
+  float: none;
+}
+
+/* Provide styling for table cell text alignment */
+table td.text-left,
+table th.text-left {
+  text-align: left;
+}
+table td.text-center,
+table th.text-center {
+  text-align: center;
+}
+table td.text-right,
+table th.text-right {
+  text-align: right;
+}
+
+/* Make the alternative author contact information look less like just another
+   author, and group it closer with the primary author contact information */
+.alternative-contact {
+  margin: 0.5em 0 0.25em 0;
+}
+address .non-ascii {
+  margin: 0 0 0 2em;
+}
+
+/* With it being possible to set tables with alignment
+  left, center, and right, { width: 100%; } does not make sense */
+table {
+  width: auto;
+}
+
+/* Avoid reference text that sits in a block with very wide left margin,
+   because of a long floating dt label.*/
+.references dd {
+  overflow: visible;
+}
+
+/* Control caption placement */
+caption {
+  caption-side: bottom;
+}
+
+/* Limit the width of the author address vcard, so names in right-to-left
+   script don't end up on the other side of the page. */
+
+address.vcard {
+  max-width: 30em;
+  margin-right: auto;
+}
+
+/* For address alignment dependent on LTR or RTL scripts */
+address div.left {
+  text-align: left;
+}
+address div.right {
+  text-align: right;
+}
+
+/* Provide table alignment support.  We can't use the alignX classes above
+   since they do unwanted things with caption and other styling. */
+table.right {
+ margin-left: auto;
+ margin-right: 0;
+}
+table.center {
+ margin-left: auto;
+ margin-right: auto;
+}
+table.left {
+ margin-left: 0;
+ margin-right: auto;
+}
+
+/* Give the table caption label the same styling as the figcaption */
+caption a[href] {
+  color: #222;
+}
+
+@media print {
+  .toplink {
+    display: none;
+  }
+
+  /* avoid overwriting the top border line with the ToC header */
+  #toc {
+    padding-top: 1px;
+  }
+
+  /* Avoid page breaks inside dl and author address entries */
+  .vcard {
+    page-break-inside: avoid;
+  }
+
+}
+/* Tweak the bcp14 keyword presentation */
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+/* Tweak the invisible space above H* in order not to overlay links in text above */
+ h2 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 31px;
+ }
+ h3 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+ h4 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+/* Float artwork pilcrow to the right */
+@media screen {
+  .artwork a.pilcrow {
+    display: block;
+    line-height: 0.7;
+    margin-top: 0.15em;
+  }
+}
+/* Make pilcrows on dd visible */
+@media screen {
+  dd:hover > a.pilcrow {
+    visibility: visible;
+  }
+}
+/* Make the placement of figcaption match that of a table's caption
+   by removing the figure's added bottom margin */
+.alignLeft.art-text,
+.alignCenter.art-text,
+.alignRight.art-text {
+   margin-bottom: 0;
+}
+.alignLeft,
+.alignCenter,
+.alignRight {
+  margin: 1em 0 0 0;
+}
+/* In print, the pilcrow won't show on hover, so prevent it from taking up space,
+   possibly even requiring a new line */
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+/* Styling for the external metadata */
+div#external-metadata {
+  background-color: #eee;
+  padding: 0.5em;
+  margin-bottom: 0.5em;
+  display: none;
+}
+div#internal-metadata {
+  padding: 0.5em;                       /* to match the external-metadata padding */
+}
+/* Styling for title RFC Number */
+h1#rfcnum {
+  clear: both;
+  margin: 0 0 -1em;
+  padding: 1em 0 0 0;
+}
+/* Make .olPercent look the same as <ol><li> */
+dl.olPercent > dd {
+  margin-bottom: 0.25em;
+  min-height: initial;
+}
+/* Give aside some styling to set it apart */
+aside {
+  border-left: 1px solid #ddd;
+  margin: 1em 0 1em 2em;
+  padding: 0.2em 2em;
+}
+aside > dl,
+aside > ol,
+aside > ul,
+aside > table,
+aside > p {
+  margin-bottom: 0.5em;
+}
+/* Additional page break settings */
+@media print {
+  figcaption, table caption {
+    page-break-before: avoid;
+  }
+}
+/* Font size adjustments for print */
+@media print {
+  body  { font-size: 10pt;      line-height: normal; max-width: 96%; }
+  h1    { font-size: 1.72em;    padding-top: 1.5em; } /* 1*1.2*1.2*1.2 */
+  h2    { font-size: 1.44em;    padding-top: 1.5em; } /* 1*1.2*1.2 */
+  h3    { font-size: 1.2em;     padding-top: 1.5em; } /* 1*1.2 */
+  h4    { font-size: 1em;       padding-top: 1.5em; }
+  h5, h6 { font-size: 1em;      margin: initial; padding: 0.5em 0 0.3em; }
+}
+/* Sourcecode margin in print, when there's no pilcrow */
+@media print {
+  .artwork,
+  .artwork > pre,
+  .sourcecode {
+    margin-bottom: 1em;
+  }
+}
+/* Avoid narrow tables forcing too narrow table captions, which may render badly */
+table {
+  min-width: 20em;
+}
+/* ol type a */
+ol.type-a { list-style-type: lower-alpha; }
+ol.type-A { list-style-type: upper-alpha; }
+ol.type-i { list-style-type: lower-roman; }
+ol.type-I { list-style-type: upper-roman; }
+/* Apply the print table and row borders in general, on request from the RPC,
+and increase the contrast between border and odd row background slightly */
+table {
+  border: 1px solid #ddd;
+}
+td {
+  border-top: 1px solid #ddd;
+}
+tr {
+  break-inside: avoid;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f8f8f8;
+}
+/* Use style rules to govern display of the TOC. */
+@media screen and (max-width: 1023px) {
+  #toc nav { display: none; }
+  #toc.active nav { display: block; }
+}
+/* Add support for keepWithNext */
+.keepWithNext {
+  break-after: avoid-page;
+  break-after: avoid-page;
+}
+/* Add support for keepWithPrevious */
+.keepWithPrevious {
+  break-before: avoid-page;
+}
+/* Change the approach to avoiding breaks inside artwork etc. */
+figure, pre, table, .artwork, .sourcecode  {
+  break-before: auto;
+  break-after: auto;
+}
+/* Avoid breaks between <dt> and <dd> */
+dl {
+  break-before: auto;
+  break-inside: auto;
+}
+dt {
+  break-before: auto;
+  break-after: avoid-page;
+}
+dd {
+  break-before: avoid-page;
+  break-after: auto;
+  orphans: 3;
+  widows: 3
+}
+span.break, dd.break {
+  margin-bottom: 0;
+  min-height: 0;
+  break-before: auto;
+  break-inside: auto;
+  break-after: auto;
+}
+/* Undo break-before ToC */
+@media print {
+  #toc {
+    break-before: auto;
+  }
+}
+/* Text in compact lists should not get extra bottom margin space,
+   since that would makes the list not compact */
+ul.compact p, .ulCompact p,
+ol.compact p, .olCompact p {
+ margin: 0;
+}
+/* But the list as a whole needs the extra space at the end */
+section ul.compact,
+section .ulCompact,
+section ol.compact,
+section .olCompact {
+  margin-bottom: 1em;                    /* same as p not within ul.compact etc. */
+}
+/* The tt and code background above interferes with for instance table cell
+   backgrounds.  Changed to something a bit more selective. */
+tt, code {
+  background-color: transparent;
+}
+p tt, p code, li tt, li code, dt tt, dt code {
+  background-color: #f8f8f8;
+}
+/* Tweak the pre margin -- 0px doesn't come out well */
+pre {
+   margin-top: 0.5px;
+}
+/* Tweak the compact list text */
+ul.compact, .ulCompact,
+ol.compact, .olCompact,
+dl.compact, .dlCompact {
+  line-height: normal;
+}
+/* Don't add top margin for nested lists */
+li > ul, li > ol, li > dl,
+dd > ul, dd > ol, dd > dl,
+dl > dd > dl {
+  margin-top: initial;
+}
+/* Elements that should not be rendered on the same line as a <dt> */
+/* This should match the element list in writer.text.TextWriter.render_dl() */
+dd > div.artwork:first-child,
+dd > aside:first-child,
+dd > blockquote:first-child,
+dd > figure:first-child,
+dd > ol:first-child,
+dd > div.sourcecode:first-child,
+dd > table:first-child,
+dd > ul:first-child {
+  clear: left;
+}
+/* fix for weird browser behaviour when <dd/> is empty */
+dt+dd:empty::before{
+  content: "\00a0";
+}
+/* Make paragraph spacing inside <li> smaller than in body text, to fit better within the list */
+li > p {
+  margin-bottom: 0.5em
+}
+/* Don't let p margin spill out from inside list items */
+li > p:last-of-type:only-child {
+  margin-bottom: 0;
+}
+</style>
+<link href="rfc-local.css" rel="stylesheet" type="text/css">
+<script type="application/javascript">async function addMetadata(){try{const e=document.styleSheets[0].cssRules;for(let t=0;t<e.length;t++)if(/#identifiers/.exec(e[t].selectorText)){const a=e[t].cssText.replace("#identifiers","#external-updates");document.styleSheets[0].insertRule(a,document.styleSheets[0].cssRules.length)}}catch(e){console.log(e)}const e=document.getElementById("external-metadata");if(e)try{var t,a="",o=function(e){const t=document.getElementsByTagName("meta");for(let a=0;a<t.length;a++)if(t[a].getAttribute("name")===e)return t[a].getAttribute("content");return""}("rfc.number");if(o){t="https://www.rfc-editor.org/rfc/rfc"+o+".json";try{const e=await fetch(t);a=await e.json()}catch(e){t=document.URL.indexOf("html")>=0?document.URL.replace(/html$/,"json"):document.URL+".json";const o=await fetch(t);a=await o.json()}}if(!a)return;e.style.display="block";const s="",d="https://datatracker.ietf.org/doc",n="https://datatracker.ietf.org/ipr/search",c="https://www.rfc-editor.org/info",l=a.doc_id.toLowerCase(),i=a.doc_id.slice(0,3).toLowerCase(),f=a.doc_id.slice(3).replace(/^0+/,""),u={status:"Status",obsoletes:"Obsoletes",obsoleted_by:"Obsoleted By",updates:"Updates",updated_by:"Updated By",see_also:"See Also",errata_url:"Errata"};let h="<dl style='overflow:hidden' id='external-updates'>";["status","obsoletes","obsoleted_by","updates","updated_by","see_also","errata_url"].forEach(e=>{if("status"==e){a[e]=a[e].toLowerCase();var t=a[e].split(" "),o=t.length,w="",p=1;for(let e=0;e<o;e++)p<o?w=w+r(t[e])+" ":w+=r(t[e]),p++;a[e]=w}else if("obsoletes"==e||"obsoleted_by"==e||"updates"==e||"updated_by"==e){var g,m="",b=1;g=a[e].length;for(let t=0;t<g;t++)a[e][t]&&(a[e][t]=String(a[e][t]).toLowerCase(),m=b<g?m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>, ":m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>",b++);a[e]=m}else if("see_also"==e){var y,L="",C=1;y=a[e].length;for(let t=0;t<y;t++)if(a[e][t]){a[e][t]=String(a[e][t]);var _=a[e][t].slice(0,3),v=a[e][t].slice(3).replace(/^0+/,"");L=C<y?"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>, ":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>, ":"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>",C++}a[e]=L}else if("errata_url"==e){var R="";R=a[e]?R+"<a href='"+a[e]+"'>Errata exist</a> | <a href='"+d+"/"+l+"'>Datatracker</a>| <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>":"<a href='"+d+"/"+l+"'>Datatracker</a> | <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>",a[e]=R}""!=a[e]?"Errata"==u[e]?h+=`<dt>More info:</dt><dd>${a[e]}</dd>`:h+=`<dt>${u[e]}:</dt><dd>${a[e]}</dd>`:"Errata"==u[e]&&(h+=`<dt>More info:</dt><dd>${a[e]}</dd>`)}),h+="</dl>",e.innerHTML=h}catch(e){console.log(e)}else console.log("Could not locate metadata <div> element");function r(e){return e.charAt(0).toUpperCase()+e.slice(1)}}window.removeEventListener("load",addMetadata),window.addEventListener("load",addMetadata);</script>
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">E2EE HTTP</td>
+<td class="right">June 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Vasylenko</td>
+<td class="center">Expires 6 December 2026</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Network Working Group</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-vasylenko-e2ee-http-00</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-06-04" class="published">4 June 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Experimental</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2026-12-06">6 December 2026</time></dd>
+<dt class="label-authors">Author:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">V. Vasylenko</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">End-to-End Encryption for HTTP APIs Using X25519 and AES-GCM</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">This document specifies an application-layer end-to-end encryption (E2EE)
+scheme for HTTP APIs. The scheme uses X25519 Elliptic Curve Diffie-Hellman
+(ECDH) for key agreement, HKDF-SHA256 for key derivation, and AES-GCM
+(with 128-, 192-, or 256-bit keys) for authenticated encryption of
+request and response payloads. Server public keys are discovered through
+a Well-Known URI and authenticated either by TLS or by a stronger
+out-of-band trust mechanism, depending on the deployment threat model.
+The scheme is designed to provide confidentiality and integrity of
+payloads independent of, and in addition to, transport-layer security
+such as TLS. It provides replay protection and key rotation.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 6 December 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1" class="keepWithNext"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1" class="keepWithNext"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-conventions-and-definitions" class="internal xref">Conventions and Definitions</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1" class="keepWithNext"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-protocol-overview" class="internal xref">Protocol Overview</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-key-discovery" class="internal xref">Key Discovery</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-well-known-uri" class="internal xref">Well-Known URI</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-key-set-document" class="internal xref">Key Set Document</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3">
+                <p id="section-toc.1-1.4.2.3.1"><a href="#section-4.3" class="auto internal xref">4.3</a>.  <a href="#name-caching" class="internal xref">Caching</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.4">
+                <p id="section-toc.1-1.4.2.4.1"><a href="#section-4.4" class="auto internal xref">4.4</a>.  <a href="#name-out-of-band-trust" class="internal xref">Out-of-Band Trust</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-aead-identifiers" class="internal xref">AEAD Identifiers</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-key-agreement-and-derivatio" class="internal xref">Key Agreement and Derivation</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-ephemeral-client-keys-and-s" class="internal xref">Ephemeral Client Keys and Sessions</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-shared-secret" class="internal xref">Shared Secret</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-encryption-key-derivation" class="internal xref">Encryption Key Derivation</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-message-format" class="internal xref">Message Format</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-media-type" class="internal xref">Media Type</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-wire-format" class="internal xref">Wire Format</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.3">
+                <p id="section-toc.1-1.7.2.3.1"><a href="#section-7.3" class="auto internal xref">7.3</a>.  <a href="#name-interaction-with-content-di" class="internal xref">Interaction with Content-Digest</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.4">
+                <p id="section-toc.1-1.7.2.4.1"><a href="#section-7.4" class="auto internal xref">7.4</a>.  <a href="#name-additional-authenticated-da" class="internal xref">Additional Authenticated Data</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.5">
+                <p id="section-toc.1-1.7.2.5.1"><a href="#section-7.5" class="auto internal xref">7.5</a>.  <a href="#name-binding-http-semantics" class="internal xref">Binding HTTP Semantics</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-the-e2ee-session-field" class="internal xref">The E2EE-Session Field</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-syntax" class="internal xref">Syntax</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-inner-content-type" class="internal xref">Inner Content Type</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.3">
+                <p id="section-toc.1-1.8.2.3.1"><a href="#section-8.3" class="auto internal xref">8.3</a>.  <a href="#name-example" class="internal xref">Example</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4">
+                <p id="section-toc.1-1.8.2.4.1"><a href="#section-8.4" class="auto internal xref">8.4</a>.  <a href="#name-use-in-requests-and-respons" class="internal xref">Use in Requests and Responses</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.5">
+                <p id="section-toc.1-1.8.2.5.1"><a href="#section-8.5" class="auto internal xref">8.5</a>.  <a href="#name-validation-order" class="internal xref">Validation Order</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-error-handling" class="internal xref">Error Handling</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.1">
+                <p id="section-toc.1-1.10.2.1.1"><a href="#section-10.1" class="auto internal xref">10.1</a>.  <a href="#name-well-known-uri-2" class="internal xref">Well-Known URI</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.2">
+                <p id="section-toc.1-1.10.2.2.1"><a href="#section-10.2" class="auto internal xref">10.2</a>.  <a href="#name-media-type-2" class="internal xref">Media Type</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.3">
+                <p id="section-toc.1-1.10.2.3.1"><a href="#section-10.3" class="auto internal xref">10.3</a>.  <a href="#name-http-field-names" class="internal xref">HTTP Field Names</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.4">
+                <p id="section-toc.1-1.10.2.4.1"><a href="#section-10.4" class="auto internal xref">10.4</a>.  <a href="#name-problem-type-urn-parameter-" class="internal xref">Problem Type URN Parameter Identifier</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.5">
+                <p id="section-toc.1-1.10.2.5.1"><a href="#section-10.5" class="auto internal xref">10.5</a>.  <a href="#name-e2ee-error-codes" class="internal xref">E2EE Error Codes</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.1">
+                <p id="section-toc.1-1.11.2.1.1"><a href="#section-11.1" class="auto internal xref">11.1</a>.  <a href="#name-threat-model" class="internal xref">Threat Model</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.2">
+                <p id="section-toc.1-1.11.2.2.1"><a href="#section-11.2" class="auto internal xref">11.2</a>.  <a href="#name-transport-layer-security" class="internal xref">Transport Layer Security</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.3">
+                <p id="section-toc.1-1.11.2.3.1"><a href="#section-11.3" class="auto internal xref">11.3</a>.  <a href="#name-server-authentication-and-k" class="internal xref">Server Authentication and Key Trust</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.4">
+                <p id="section-toc.1-1.11.2.4.1"><a href="#section-11.4" class="auto internal xref">11.4</a>.  <a href="#name-forward-secrecy" class="internal xref">Forward Secrecy</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.5">
+                <p id="section-toc.1-1.11.2.5.1"><a href="#section-11.5" class="auto internal xref">11.5</a>.  <a href="#name-replay-protection" class="internal xref">Replay Protection</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.6">
+                <p id="section-toc.1-1.11.2.6.1"><a href="#section-11.6" class="auto internal xref">11.6</a>.  <a href="#name-plaintext-error-responses" class="internal xref">Plaintext Error Responses</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.7">
+                <p id="section-toc.1-1.11.2.7.1"><a href="#section-11.7" class="auto internal xref">11.7</a>.  <a href="#name-key-rotation" class="internal xref">Key Rotation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.8">
+                <p id="section-toc.1-1.11.2.8.1"><a href="#section-11.8" class="auto internal xref">11.8</a>.  <a href="#name-algorithm-agility" class="internal xref">Algorithm Agility</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.9">
+                <p id="section-toc.1-1.11.2.9.1"><a href="#section-11.9" class="auto internal xref">11.9</a>.  <a href="#name-side-channels-and-implement" class="internal xref">Side Channels and Implementation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.10">
+                <p id="section-toc.1-1.11.2.10.1"><a href="#section-11.10" class="auto internal xref">11.10</a>. <a href="#name-denial-of-service" class="internal xref">Denial of Service</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.11">
+                <p id="section-toc.1-1.11.2.11.1"><a href="#section-11.11" class="auto internal xref">11.11</a>. <a href="#name-comparison-with-transport-l" class="internal xref">Comparison with Transport-Layer Solutions</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-privacy-considerations" class="internal xref">Privacy Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#section-13" class="auto internal xref">13</a>. <a href="#name-references" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.1">
+                <p id="section-toc.1-1.13.2.1.1"><a href="#section-13.1" class="auto internal xref">13.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.2">
+                <p id="section-toc.1-1.13.2.2.1"><a href="#section-13.2" class="auto internal xref">13.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#appendix-B" class="auto internal xref"></a><a href="#name-worked-example" class="internal xref">Worked Example</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.1">
+                <p id="section-toc.1-1.15.2.1.1"><a href="#appendix-B.1" class="auto internal xref"></a><a href="#name-inputs" class="internal xref">Inputs</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.2">
+                <p id="section-toc.1-1.15.2.2.1"><a href="#appendix-B.2" class="auto internal xref"></a><a href="#name-key-agreement-and-derivation" class="internal xref">Key Agreement and Derivation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.3">
+                <p id="section-toc.1-1.15.2.3.1"><a href="#appendix-B.3" class="auto internal xref"></a><a href="#name-request" class="internal xref">Request</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.4">
+                <p id="section-toc.1-1.15.2.4.1"><a href="#appendix-B.4" class="auto internal xref"></a><a href="#name-response" class="internal xref">Response</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16">
+            <p id="section-toc.1-1.16.1"><a href="#appendix-C" class="auto internal xref"></a><a href="#name-authors-address" class="internal xref">Author's Address</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">Transport Layer Security (TLS) <span>[<a href="#RFC8446" class="cite xref">RFC8446</a>]</span> protects HTTP <span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>
+traffic between two endpoints that share a direct connection. In many
+modern deployments, however, request and response payloads traverse
+intermediaries such as reverse proxies, load balancers, content delivery
+networks, and API gateways. Each intermediary terminates TLS and observes
+plaintext, which expands the attack surface and weakens the
+confidentiality guarantee provided to end users.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">This document specifies a payload-level end-to-end encryption (E2EE)
+scheme for HTTP APIs. The scheme protects the request and response
+payload between the originating client and the terminating application
+server. Intermediaries that handle the HTTP message can route, log
+metadata, and apply policy. They cannot read or modify the protected
+payload when clients authenticate the server key set according to the
+deployment threat model described in <a href="#security" class="auto internal xref">Section 11</a>.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<p id="section-1-3">The scheme combines:<a href="#section-1-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1-4.1">
+          <p id="section-1-4.1.1">X25519 <span>[<a href="#RFC7748" class="cite xref">RFC7748</a>]</span> for Elliptic Curve Diffie-Hellman (ECDH) key
+agreement.<a href="#section-1-4.1.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-1-4.2">
+          <p id="section-1-4.2.1">HKDF with SHA-256 <span>[<a href="#RFC5869" class="cite xref">RFC5869</a>]</span> for deriving symmetric keys from the
+shared secret.<a href="#section-1-4.2.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-1-4.3">
+          <p id="section-1-4.3.1">AES-GCM <span>[<a href="#NIST-SP-800-38D" class="cite xref">NIST-SP-800-38D</a>]</span> with 128-, 192-, or 256-bit keys for
+authenticated encryption of payloads.<a href="#section-1-4.3.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-1-4.4">
+          <p id="section-1-4.4.1">A Well-Known URI <span>[<a href="#RFC8615" class="cite xref">RFC8615</a>]</span> for publishing the server's static or
+rotating public key set.<a href="#section-1-4.4.1" class="pilcrow">¶</a></p>
+</li>
+      </ul>
+<p id="section-1-5">The scheme does not replace TLS; it is intended to be deployed on top of
+TLS so that transport metadata such as the Host header and request path
+remain protected on the wire.<a href="#section-1-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="conventions-and-definitions">
+<section id="section-2">
+      <h2 id="name-conventions-and-definitions">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-conventions-and-definitions" class="section-name selfRef">Conventions and Definitions</a>
+      </h2>
+<p id="section-2-1">The key words "<span class="bcp14">MUST</span>", "<span class="bcp14">MUST NOT</span>", "<span class="bcp14">REQUIRED</span>", "<span class="bcp14">SHALL</span>", "<span class="bcp14">SHALL NOT</span>", "<span class="bcp14">SHOULD</span>", "<span class="bcp14">SHOULD NOT</span>", "<span class="bcp14">RECOMMENDED</span>", "<span class="bcp14">NOT RECOMMENDED</span>",
+"<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be interpreted as
+described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they
+appear in all capitals, as shown here.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<p id="section-2-2">This document uses the following terms:<a href="#section-2-2" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-2-3">
+        <dt id="section-2-3.1">Client:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.2">
+          <p id="section-2-3.2.1">The party that initiates an HTTP request and that owns an ephemeral
+X25519 key pair for the duration of a session.<a href="#section-2-3.2.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.3">Server:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.4">
+          <p id="section-2-3.4.1">The party that terminates the HTTP request, owns one or more X25519
+key pairs whose public components are published, and processes the
+decrypted payload.<a href="#section-2-3.4.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.5">Encryption Key (EK):</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.6">
+          <p id="section-2-3.6.1">A direction-specific symmetric key of 128, 192, or 256 bits derived
+from the X25519 shared secret using HKDF-SHA256 and used as the
+AES-GCM key. The length is determined by the negotiated AEAD
+identifier (see <a href="#aead-ids" class="auto internal xref">Section 5</a>).<a href="#section-2-3.6.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.7">AEAD Identifier (AEAD):</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.8">
+          <p id="section-2-3.8.1">A short string naming the AES-GCM variant in use. One of
+<code>"AES-128-GCM"</code>, <code>"AES-192-GCM"</code>, or <code>"AES-256-GCM"</code>.<a href="#section-2-3.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.9">Key Identifier (KID):</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.10">
+          <p id="section-2-3.10.1">A short, opaque label that identifies one public key in the server's
+published key set.<a href="#section-2-3.10.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.11">Fingerprint:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.12">
+          <p id="section-2-3.12.1">A base64url-encoded prefix of the SHA-256 hash of a public key,
+intended for human-readable verification.<a href="#section-2-3.12.1" class="pilcrow">¶</a></p>
+</dd>
+      <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="protocol-overview">
+<section id="section-3">
+      <h2 id="name-protocol-overview">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-protocol-overview" class="section-name selfRef">Protocol Overview</a>
+      </h2>
+<p id="section-3-1">The protocol has three phases: key discovery, key agreement, and
+authenticated message exchange.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<span id="name-e2ee-http-message-flow"></span><figure id="figure-1">
+        <div class="alignLeft art-text artwork" id="section-3-2.1">
+<pre>
++---------+                                    +---------+
+| Client  |                                    | Server  |
++----+----+                                    +----+----+
+     |                                              |
+     |  GET /.well-known/encryption-keys            |
+     |---------------------------------------------&gt;|
+     |                                              |
+     |  200 OK { keys: [ ... ] }                   |
+     |&lt;---------------------------------------------|
+     |                                              |
+     | generate ephemeral (csk, cpk)                |
+     | shared = X25519(csk, server_public_key)      |
+     | EK_req, EK_res = HKDF-SHA256(...)            |
+     |                                              |
+     |  POST /api/v1/resource                       |
+     |  E2EE-Session: "&lt;kid&gt;";                     |
+     |              aead="AES-256-GCM";            |
+     |              epk=:&lt;32B base64&gt;:; ts=&lt;int&gt;;  |
+     |              nid="&lt;uuid&gt;"                   |
+     |  Content-Type: application/e2ee              |
+     |  Body: nonce || ciphertext || tag            |
+     |---------------------------------------------&gt;|
+     |                                              |
+     |                       shared = X25519(...)  |
+     |                       EK_req, EK_res = ...   |
+     |                       decrypt, process       |
+     |                                              |
+     |  200 OK                                      |
+     |  E2EE-Session: "&lt;kid&gt;";                     |
+     |              aead="AES-256-GCM"; ts=&lt;int&gt;   |
+     |  Content-Type: application/e2ee              |
+     |  Body: nonce || ciphertext || tag            |
+     |&lt;---------------------------------------------|
+     |                                              |
+</pre>
+</div>
+<figcaption><a href="#figure-1" class="selfRef">Figure 1</a>:
+<a href="#name-e2ee-http-message-flow" class="selfRef">E2EE HTTP message flow</a>
+        </figcaption></figure>
+</section>
+</div>
+<div id="key-discovery">
+<section id="section-4">
+      <h2 id="name-key-discovery">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-key-discovery" class="section-name selfRef">Key Discovery</a>
+      </h2>
+<div id="well-known-uri">
+<section id="section-4.1">
+        <h3 id="name-well-known-uri">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-well-known-uri" class="section-name selfRef">Well-Known URI</a>
+        </h3>
+<p id="section-4.1-1">A server that supports this scheme <span class="bcp14">MUST</span> publish its public key set at the
+Well-Known URI <span>[<a href="#RFC8615" class="cite xref">RFC8615</a>]</span>:<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-4.1-2">
+<pre>
+/.well-known/encryption-keys
+</pre><a href="#section-4.1-2" class="pilcrow">¶</a>
+</div>
+<p id="section-4.1-3">The resource <span class="bcp14">MUST</span> be served over HTTPS and <span class="bcp14">MUST</span> be retrievable with an
+HTTP GET request. The response <span class="bcp14">MUST</span> have media type <code>application/json</code>.<a href="#section-4.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="key-set-document">
+<section id="section-4.2">
+        <h3 id="name-key-set-document">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-key-set-document" class="section-name selfRef">Key Set Document</a>
+        </h3>
+<p id="section-4.2-1">The response body is a JSON object with the following members:<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.2-2">
+          <dt id="section-4.2-2.1">issuer:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-2.2">
+            <p id="section-4.2-2.2.1">A string identifying the server origin. The value <span class="bcp14">MUST</span> be an HTTPS
+origin and <span class="bcp14">MUST</span> match the origin from which the key set was retrieved
+unless the client has explicit out-of-band configuration allowing
+another issuer. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-2.3">keys:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-2.4">
+            <p id="section-4.2-2.4.1">A JSON array of one or more key objects, ordered from most-preferred
+to least-preferred. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+<p id="section-4.2-3">Each key object has the following members:<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.2-4">
+          <dt id="section-4.2-4.1">kid:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.2">
+            <p id="section-4.2-4.2.1">A short opaque string identifying this key within the set. <span class="bcp14">REQUIRED</span>.
+KIDs <span class="bcp14">MUST</span> be unique within a single key set. The value <span class="bcp14">MUST</span> contain
+between 1 and 128 characters and <span class="bcp14">MUST</span> match the regular expression
+<code>^[A-Za-z0-9._~-]+$</code>. KID comparison is case-sensitive.<a href="#section-4.2-4.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.3">alg:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.4">
+            <p id="section-4.2-4.4.1">The key agreement algorithm. <span class="bcp14">MUST</span> be the string <code>"X25519"</code> for this
+version of the protocol. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-4.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.5">aeads:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.6">
+            <p id="section-4.2-4.6.1">A non-empty JSON array of AEAD Identifier strings (see <a href="#aead-ids" class="auto internal xref">Section 5</a>)
+that the server is willing to accept under this key, in order of
+server preference. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-4.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.7">public_key:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.8">
+            <p id="section-4.2-4.8.1">The 32-byte X25519 public key, base64url-encoded <span>[<a href="#RFC4648" class="cite xref">RFC4648</a>]</span> without
+padding. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-4.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.9">fingerprint:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.10">
+            <p id="section-4.2-4.10.1">The base64url-encoded <span>[<a href="#RFC4648" class="cite xref">RFC4648</a>]</span> first 16 bytes of the SHA-256 hash
+of the raw 32-byte public key. <span class="bcp14">RECOMMENDED</span>.<a href="#section-4.2-4.10.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.11">not_before:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.12">
+            <p id="section-4.2-4.12.1">An RFC 3339 <span>[<a href="#RFC3339" class="cite xref">RFC3339</a>]</span> <code>date-time</code> value before which the key <span class="bcp14">MUST NOT</span> be used. <span class="bcp14">OPTIONAL</span>.<a href="#section-4.2-4.12.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.13">not_after:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.14">
+            <p id="section-4.2-4.14.1">An RFC 3339 <span>[<a href="#RFC3339" class="cite xref">RFC3339</a>]</span> <code>date-time</code> value after which the key <span class="bcp14">MUST NOT</span> be used. <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-4.14.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-4.15">max_skew:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-4.16">
+            <p id="section-4.2-4.16.1">A non-negative integer specifying the maximum acceptable absolute
+difference, in seconds, between the request <code>ts</code> parameter and the
+server clock. This value bounds the timestamp check in addition to
+the key validity window and determines the minimum replay-cache
+retention period (see <a href="#security" class="auto internal xref">Section 11</a>). <span class="bcp14">REQUIRED</span>.<a href="#section-4.2-4.16.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+<p id="section-4.2-5">Clients <span class="bcp14">MUST</span> treat a key object that is missing a required member, has a
+member of the wrong JSON type, or contains an invalid <code>public_key</code>,
+<code>not_before</code>, <code>not_after</code>, or <code>max_skew</code> value as unusable. Clients
+<span class="bcp14">MUST</span> treat a key set containing duplicate <code>kid</code> values as invalid.<a href="#section-4.2-5" class="pilcrow">¶</a></p>
+<p id="section-4.2-6">Example:<a href="#section-4.2-6" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-4.2-7">
+<pre>
+{
+  "issuer": "https://api.example.com",
+  "keys": [
+    {
+      "kid": "2026-06",
+      "alg": "X25519",
+      "aeads": ["AES-256-GCM", "AES-128-GCM"],
+      "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+      "fingerprint": "qqj_9wO1CyKX9PbhNQj3JA",
+      "not_before": "2026-06-09T00:00:00Z",
+      "not_after":  "2026-07-09T00:00:00Z",
+      "max_skew": 300
+    }
+  ]
+}
+</pre><a href="#section-4.2-7" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="caching">
+<section id="section-4.3">
+        <h3 id="name-caching">
+<a href="#section-4.3" class="section-number selfRef">4.3. </a><a href="#name-caching" class="section-name selfRef">Caching</a>
+        </h3>
+<p id="section-4.3-1">Responses <span class="bcp14">SHOULD</span> include a <code>Cache-Control</code> header. Clients <span class="bcp14">MAY</span> cache the
+key set for up to the duration indicated, but <span class="bcp14">MUST</span> refresh the key set
+before using a key whose <code>not_after</code> is in the past, and <span class="bcp14">SHOULD</span> refresh
+on receipt of a <code>key_unknown</code> error (see <a href="#errors" class="auto internal xref">Section 9</a>).<a href="#section-4.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="out-of-band-trust">
+<section id="section-4.4">
+        <h3 id="name-out-of-band-trust">
+<a href="#section-4.4" class="section-number selfRef">4.4. </a><a href="#name-out-of-band-trust" class="section-name selfRef">Out-of-Band Trust</a>
+        </h3>
+<p id="section-4.4-1">The integrity of the key set ultimately depends on the integrity of the
+channel used to retrieve it. Clients <span class="bcp14">MUST</span> verify the TLS server
+certificate of the server hosting the Well-Known URI per <span>[<a href="#RFC8446" class="cite xref">RFC8446</a>]</span> and
+<span>[<a href="#RFC9325" class="cite xref">RFC9325</a>]</span>. Clients <span class="bcp14">MUST</span> also verify that the <code>issuer</code> value in the key
+set matches the HTTPS origin used to retrieve it, unless an out-of-band
+configuration explicitly authorizes a different issuer.<a href="#section-4.4-1" class="pilcrow">¶</a></p>
+<p id="section-4.4-2">If the deployment threat model includes TLS-terminating intermediaries
+that are not trusted with plaintext payloads, TLS authentication of the
+Well-Known URI is not sufficient to authenticate the encryption keys:
+such an intermediary could substitute its own key set. In that threat
+model, clients <span class="bcp14">MUST</span> authenticate the key set independently of the TLS
+connection by using either a pinned key fingerprint or a verified HTTP
+Message Signature whose signing key was distributed out of band; see
+<a href="#security" class="auto internal xref">Section 11</a>.<a href="#section-4.4-2" class="pilcrow">¶</a></p>
+<p id="section-4.4-3">Servers <span class="bcp14">SHOULD</span> additionally protect the key set response with HTTP
+Message Signatures <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span>, signed under a long-lived signing key
+distributed out of band, and <span class="bcp14">SHOULD</span> include a <code>Content-Digest</code> field
+<span>[<a href="#RFC9530" class="cite xref">RFC9530</a>]</span> over the key set body so that the signature covers a
+content hash rather than the raw bytes. Clients that have a pinned
+signing key <span class="bcp14">MUST</span> reject any key set response whose signature is missing
+or invalid.<a href="#section-4.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="aead-ids">
+<section id="section-5">
+      <h2 id="name-aead-identifiers">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-aead-identifiers" class="section-name selfRef">AEAD Identifiers</a>
+      </h2>
+<p id="section-5-1">This document defines three AEAD Identifiers, all based on AES-GCM
+<span>[<a href="#NIST-SP-800-38D" class="cite xref">NIST-SP-800-38D</a>]</span>:<a href="#section-5-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+        <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">AEAD Identifier</th>
+            <th class="text-right" rowspan="1" colspan="1">Key length</th>
+            <th class="text-right" rowspan="1" colspan="1">Nonce length</th>
+            <th class="text-right" rowspan="1" colspan="1">Tag length</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>AES-128-GCM</code>
+</td>
+            <td class="text-right" rowspan="1" colspan="1">16 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">12 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">16 octets</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>AES-192-GCM</code>
+</td>
+            <td class="text-right" rowspan="1" colspan="1">24 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">12 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">16 octets</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>AES-256-GCM</code>
+</td>
+            <td class="text-right" rowspan="1" colspan="1">32 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">12 octets</td>
+            <td class="text-right" rowspan="1" colspan="1">16 octets</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-5-3">All three variants share the same nonce and tag length and differ only
+in key length. Implementations <span class="bcp14">MUST</span> support <code>AES-128-GCM</code> and
+<code>AES-256-GCM</code>. Support for <code>AES-192-GCM</code> is <span class="bcp14">OPTIONAL</span>.<a href="#section-5-3" class="pilcrow">¶</a></p>
+<p id="section-5-4">The client selects one AEAD Identifier from the server's <code>aeads</code> list
+for each session and signals it in the request (see <a href="#headers" class="auto internal xref">Section 8</a>). The
+server <span class="bcp14">MUST</span> reject any request whose AEAD Identifier is not advertised
+in the current key set entry for the chosen <code>kid</code>.<a href="#section-5-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="key-agreement-and-derivation">
+<section id="section-6">
+      <h2 id="name-key-agreement-and-derivatio">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-key-agreement-and-derivatio" class="section-name selfRef">Key Agreement and Derivation</a>
+      </h2>
+<div id="sessions">
+<section id="section-6.1">
+        <h3 id="name-ephemeral-client-keys-and-s">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-ephemeral-client-keys-and-s" class="section-name selfRef">Ephemeral Client Keys and Sessions</a>
+        </h3>
+<p id="section-6.1-1">A <em>session</em> is a contiguous sequence of requests sent by one client
+under a single X25519 key pair <code>(csk, cpk)</code>. The client public key
+<code>cpk</code> is sent on the wire as the <code>epk</code> parameter of the <code>E2EE-Session</code>
+field.<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<p id="section-6.1-2">Clients <span class="bcp14">MUST</span> generate <code>(csk, cpk)</code> using a cryptographically secure
+random number generator. The default session scope is a single
+request: clients <span class="bcp14">SHOULD</span> generate a fresh key pair for every request
+unless they explicitly opt into a broader scope as described below.<a href="#section-6.1-2" class="pilcrow">¶</a></p>
+<p id="section-6.1-3">A client <span class="bcp14">MAY</span> reuse one <code>(csk, cpk)</code> across multiple requests
+provided that all of the following hold:<a href="#section-6.1-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-6.1-4.1">
+            <p id="section-6.1-4.1.1">The reuse is confined to a single logical client instance (one
+process, one user, one device).<a href="#section-6.1-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-4.2">
+            <p id="section-6.1-4.2.1">The key pair is not persisted to non-volatile storage and is
+destroyed on process exit, user logout, or after a deployment-
+defined inactivity timeout, whichever comes first.<a href="#section-6.1-4.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-4.3">
+            <p id="section-6.1-4.3.1">The deployment-defined session lifetime does not exceed the
+shortest <code>not_after</code> of any server key it references.<a href="#section-6.1-4.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-4.4">
+            <p id="section-6.1-4.4.1">The client maintains its own <code>nid</code> uniqueness within the session
+(see <a href="#security" class="auto internal xref">Section 11</a>).<a href="#section-6.1-4.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-6.1-5">Clients <span class="bcp14">MUST NOT</span> reuse <code>(csk, cpk)</code> across processes, after restart,
+across users on a shared device, or after any event that would
+invalidate the client's secure-random state (for example, virtual
+machine snapshot restore).<a href="#section-6.1-5" class="pilcrow">¶</a></p>
+<p id="section-6.1-6">Each unique value of <code>epk</code> observed by a server defines, together
+with the server <code>kid</code>, the scope of replay-cache state for that
+client (see <a href="#security" class="auto internal xref">Section 11</a>). Per-request session scope therefore
+minimises both the lifetime of the client private key and the
+amount of replay-cache state retained for any one client.<a href="#section-6.1-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="shared-secret">
+<section id="section-6.2">
+        <h3 id="name-shared-secret">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-shared-secret" class="section-name selfRef">Shared Secret</a>
+        </h3>
+<p id="section-6.2-1">The shared secret is computed as:<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-6.2-2">
+<pre>
+Z = X25519(csk, server_public_key)
+</pre><a href="#section-6.2-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.2-3">per Section 5 of <span>[<a href="#RFC7748" class="cite xref">RFC7748</a>]</span>. Implementations <span class="bcp14">MUST</span> check that <code>Z</code> is not
+the all-zero value and abort if it is.<a href="#section-6.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="encryption-key-derivation">
+<section id="section-6.3">
+        <h3 id="name-encryption-key-derivation">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-encryption-key-derivation" class="section-name selfRef">Encryption Key Derivation</a>
+        </h3>
+<p id="section-6.3-1">The request encryption key (<code>EK_req</code>) and response encryption key
+(<code>EK_res</code>) are derived from <code>Z</code> using HKDF-SHA256 <span>[<a href="#RFC5869" class="cite xref">RFC5869</a>]</span>:<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-6.3-2">
+<pre>
+PRK = HKDF-Extract(salt = cpk || server_public_key, IKM = Z)
+EK_req = HKDF-Expand(PRK,
+                     info = "e2ee/v1:req " || issuer || " "
+                            || aead || " " || kid,
+                     L    = Nk)
+EK_res = HKDF-Expand(PRK,
+                     info = "e2ee/v1:res " || issuer || " "
+                            || aead || " " || kid,
+                     L    = Nk)
+</pre><a href="#section-6.3-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-3">where:<a href="#section-6.3-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-6.3-4.1">
+            <p id="section-6.3-4.1.1"><code>||</code> denotes octet-string concatenation,<a href="#section-6.3-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.2">
+            <p id="section-6.3-4.2.1"><code>cpk</code> is the raw 32-byte client public key,<a href="#section-6.3-4.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.3">
+            <p id="section-6.3-4.3.1"><code>server_public_key</code> is the raw 32-byte server public key,<a href="#section-6.3-4.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.4">
+            <p id="section-6.3-4.4.1"><code>issuer</code> is the UTF-8 encoding of the key set <code>issuer</code> value,<a href="#section-6.3-4.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.5">
+            <p id="section-6.3-4.5.1"><code>aead</code> is the UTF-8 encoding of the selected AEAD Identifier
+(<code>"AES-128-GCM"</code>, <code>"AES-192-GCM"</code>, or <code>"AES-256-GCM"</code>),<a href="#section-6.3-4.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.6">
+            <p id="section-6.3-4.6.1"><code>kid</code> is the UTF-8 encoding of the Key Identifier used,<a href="#section-6.3-4.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-4.7">
+            <p id="section-6.3-4.7.1"><code>Nk</code> is the key length in octets implied by <code>aead</code> (16, 24, or 32).<a href="#section-6.3-4.7.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-6.3-5">Binding <code>issuer</code>, <code>aead</code>, <code>kid</code>, and both public keys into the HKDF
+inputs binds the derived keys to the specific key agreement transcript
+and prevents cross-origin, cross-protocol, cross-key, cross-direction,
+or cross-algorithm confusion. Deriving separate request and response
+keys prevents an AES-GCM nonce collision in one direction from colliding
+with a nonce in the other direction.<a href="#section-6.3-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="message-format">
+<section id="section-7">
+      <h2 id="name-message-format">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-message-format" class="section-name selfRef">Message Format</a>
+      </h2>
+<div id="media-type">
+<section id="section-7.1">
+        <h3 id="name-media-type">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-media-type" class="section-name selfRef">Media Type</a>
+        </h3>
+<p id="section-7.1-1">Protected payloads <span class="bcp14">MUST</span> be sent with the media type <code>application/e2ee</code>.
+The media type identifies the ciphertext envelope defined by this
+document; the plaintext media type, when needed, is carried in the
+<code>cty</code> parameter of the <code>E2EE-Session</code> field (see <a href="#cty" class="auto internal xref">Section 8.2</a>).<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="wire-format">
+<section id="section-7.2">
+        <h3 id="name-wire-format">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-wire-format" class="section-name selfRef">Wire Format</a>
+        </h3>
+<p id="section-7.2-1">The body of a protected request or response is the concatenation:<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-7.2-2">
+<pre>
+body = nonce || ciphertext || tag
+</pre><a href="#section-7.2-2" class="pilcrow">¶</a>
+</div>
+<p id="section-7.2-3">where:<a href="#section-7.2-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7.2-4.1">
+            <p id="section-7.2-4.1.1"><code>nonce</code> is 12 octets, generated with a cryptographically secure random
+number generator for every message. Nonces <span class="bcp14">MUST NOT</span> be reused with the
+same direction-specific EK.<a href="#section-7.2-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.2-4.2">
+            <p id="section-7.2-4.2.1"><code>ciphertext</code> is the AES-GCM encryption of the inner plaintext using
+<code>EK_req</code> for requests or <code>EK_res</code> for responses and <code>nonce</code>, with
+additional authenticated data (AAD) as defined in <a href="#aad" class="auto internal xref">Section 7.4</a>. The
+AES-GCM key length is determined by the selected AEAD Identifier
+(see <a href="#aead-ids" class="auto internal xref">Section 5</a>).<a href="#section-7.2-4.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.2-4.3">
+            <p id="section-7.2-4.3.1"><code>tag</code> is the 16-octet AES-GCM authentication tag.<a href="#section-7.2-4.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-7.2-5">Recipients <span class="bcp14">MUST</span> reject a protected body shorter than 28 octets
+(12-octet nonce plus 16-octet tag) as <code>malformed</code>.<a href="#section-7.2-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="interaction-with-content-digest">
+<section id="section-7.3">
+        <h3 id="name-interaction-with-content-di">
+<a href="#section-7.3" class="section-number selfRef">7.3. </a><a href="#name-interaction-with-content-di" class="section-name selfRef">Interaction with Content-Digest</a>
+        </h3>
+<p id="section-7.3-1">The AES-GCM tag already provides end-to-end integrity for the
+ciphertext, so a <code>Content-Digest</code> field <span>[<a href="#RFC9530" class="cite xref">RFC9530</a>]</span> is not required
+for integrity. Senders <span class="bcp14">MAY</span> include <code>Content-Digest</code> over the raw
+ciphertext body for caching, deduplication, or intermediary
+integrity checks; in that case the digest <span class="bcp14">MUST</span> be computed over the
+exact serialized body (<code>nonce || ciphertext || tag</code>). Recipients <span class="bcp14">MUST NOT</span> treat a present <code>Content-Digest</code> as a substitute for AES-GCM tag
+verification, and <span class="bcp14">MUST NOT</span> compute or expose a digest over the
+decrypted plaintext.<a href="#section-7.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="aad">
+<section id="section-7.4">
+        <h3 id="name-additional-authenticated-da">
+<a href="#section-7.4" class="section-number selfRef">7.4. </a><a href="#name-additional-authenticated-da" class="section-name selfRef">Additional Authenticated Data</a>
+        </h3>
+<p id="section-7.4-1">The AAD passed to AES-GCM binds only the cryptographic transcript of
+the message. HTTP semantics such as method, target URI, status code,
+and selected headers are out of scope for AAD and are bound, when
+needed, by HTTP Message Signatures <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span> (see
+<a href="#http-binding" class="auto internal xref">Section 7.5</a>).<a href="#section-7.4-1" class="pilcrow">¶</a></p>
+<p id="section-7.4-2">For AAD construction, an <code>E2EE-Session</code> field value <span class="bcp14">MUST</span> first be parsed
+as a Structured Field Item and then serialized using the deterministic
+serialization algorithm for Structured Fields <span>[<a href="#RFC9651" class="cite xref">RFC9651</a>]</span>. The
+serialized field value does not include the field name, colon, or
+surrounding whitespace. Recipients <span class="bcp14">MUST NOT</span> use the raw field bytes
+as received from an HTTP/1.1 connection, because equivalent field values
+can have different wire serializations and HTTP/2 and HTTP/3 do not
+preserve an HTTP/1.1 header-field line.<a href="#section-7.4-2" class="pilcrow">¶</a></p>
+<p id="section-7.4-3">For requests, the AAD <span class="bcp14">MUST</span> be the ASCII concatenation:<a href="#section-7.4-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-7.4-4">
+<pre>
+AAD = "e2ee/v1:req" || " " || encryption-field
+</pre><a href="#section-7.4-4" class="pilcrow">¶</a>
+</div>
+<p id="section-7.4-5">For responses, the AAD <span class="bcp14">MUST</span> be the ASCII concatenation:<a href="#section-7.4-5" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-7.4-6">
+<pre>
+AAD = "e2ee/v1:res" || " " || req-encryption-field
+                        || " " || res-encryption-field
+</pre><a href="#section-7.4-6" class="pilcrow">¶</a>
+</div>
+<p id="section-7.4-7">where:<a href="#section-7.4-7" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7.4-8.1">
+            <p id="section-7.4-8.1.1"><code>encryption-field</code> is the deterministic serialization of the
+request's parsed <code>E2EE-Session</code> Structured Field value (see
+<a href="#headers" class="auto internal xref">Section 8</a>),<a href="#section-7.4-8.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.4-8.2">
+            <p id="section-7.4-8.2.1"><code>req-encryption-field</code> is the same value as <code>encryption-field</code> for
+the request that produced this response,<a href="#section-7.4-8.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.4-8.3">
+            <p id="section-7.4-8.3.1"><code>res-encryption-field</code> is the deterministic serialization of the
+response's own parsed <code>E2EE-Session</code> field value.<a href="#section-7.4-8.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-7.4-9">The leading <code>"e2ee/v1:req"</code> / <code>"e2ee/v1:res"</code> strings
+combine a protocol-version tag with a domain-separation tag. They
+prevent a request ciphertext from being accepted as a response (or
+vice versa) and isolate this protocol from any other use of
+AES-GCM under the same key.<a href="#section-7.4-9" class="pilcrow">¶</a></p>
+<p id="section-7.4-10">Including both <code>E2EE-Session</code> fields in the response AAD authenticates
+<code>kid</code>, <code>aead</code>, <code>epk</code>, <code>ts</code>, and <code>nid</code> from both directions jointly
+with the ciphertext, prevents an intermediary from altering any of
+them, and prevents response substitution across different requests.<a href="#section-7.4-10" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="http-binding">
+<section id="section-7.5">
+        <h3 id="name-binding-http-semantics">
+<a href="#section-7.5" class="section-number selfRef">7.5. </a><a href="#name-binding-http-semantics" class="section-name selfRef">Binding HTTP Semantics</a>
+        </h3>
+<p id="section-7.5-1">This specification does not bind HTTP semantics (method, target URI,
+status code, request or response headers) into the AES-GCM AAD.
+Doing so would conflict with the routine behaviour of
+TLS-terminating intermediaries that legitimately rewrite request
+targets, normalize paths, or add tracing parameters.<a href="#section-7.5-1" class="pilcrow">¶</a></p>
+<p id="section-7.5-2">Deployments that require an end-to-end binding of HTTP semantics
+<span class="bcp14">SHOULD</span> apply HTTP Message Signatures <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span> to requests and
+responses, alongside the encryption defined by this document. The
+covered-components list <span class="bcp14">SHOULD</span> include at least:<a href="#section-7.5-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7.5-3.1">
+            <p id="section-7.5-3.1.1">For requests: <code>@method</code>, <code>@target-uri</code>, the <code>E2EE-Session</code> field,
+and a <code>Content-Digest</code> field <span>[<a href="#RFC9530" class="cite xref">RFC9530</a>]</span> computed over the
+ciphertext body.<a href="#section-7.5-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.5-3.2">
+            <p id="section-7.5-3.2.1">For responses: <code>@status</code>, the <code>E2EE-Session</code> field, and a
+<code>Content-Digest</code> field over the ciphertext body.<a href="#section-7.5-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-7.5-4">Because <code>Content-Digest</code> covers the ciphertext (which already
+contains the AES-GCM tag), an RFC 9421 signature over those
+components transitively covers the encrypted payload. The signature
+key and <code>keyid</code> are independent of the X25519 key set defined here
+and are managed per <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span>.<a href="#section-7.5-4" class="pilcrow">¶</a></p>
+<p id="section-7.5-5">A deployment that omits HTTP Message Signatures relies on this
+protocol's confidentiality and integrity guarantees only at the
+payload layer, and on TLS and application-level checks for HTTP
+semantics. This is appropriate when the application cannot be
+confused by a redirected ciphertext (for example, when each endpoint
+parses a distinct payload schema and rejects unknown shapes).<a href="#section-7.5-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="headers">
+<section id="section-8">
+      <h2 id="name-the-e2ee-session-field">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-the-e2ee-session-field" class="section-name selfRef">The E2EE-Session Field</a>
+      </h2>
+<p id="section-8-1">All E2EE control metadata is carried in a single HTTP field named
+<code>E2EE-Session</code>. The field is a Structured Field <span>[<a href="#RFC9651" class="cite xref">RFC9651</a>]</span> whose value
+is an Item: a String identifying the server key (<code>kid</code>), with named
+parameters carrying the remaining metadata.<a href="#section-8-1" class="pilcrow">¶</a></p>
+<div id="syntax">
+<section id="section-8.1">
+        <h3 id="name-syntax">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-syntax" class="section-name selfRef">Syntax</a>
+        </h3>
+<p id="section-8.1-1">In the ABNF of <span>[<a href="#RFC9651" class="cite xref">RFC9651</a>]</span>, the field value is an <code>sf-item</code>:<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-8.1-2">
+<pre>
+E2EE-Session = sf-item
+</pre><a href="#section-8.1-2" class="pilcrow">¶</a>
+</div>
+<p id="section-8.1-3">The Item value is a String holding the <code>kid</code>. The following parameters
+are defined:<a href="#section-8.1-3" class="pilcrow">¶</a></p>
+<table class="center" id="table-2">
+          <caption><a href="#table-2" class="selfRef">Table 2</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Name</th>
+              <th class="text-left" rowspan="1" colspan="1">Type</th>
+              <th class="text-left" rowspan="1" colspan="1">Request</th>
+              <th class="text-left" rowspan="1" colspan="1">Response</th>
+              <th class="text-left" rowspan="1" colspan="1">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">aead</td>
+              <td class="text-left" rowspan="1" colspan="1">String</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">AEAD Identifier (see <a href="#aead-ids" class="auto internal xref">Section 5</a>).</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">epk</td>
+              <td class="text-left" rowspan="1" colspan="1">Byte Sequence</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">prohibited</td>
+              <td class="text-left" rowspan="1" colspan="1">Client ephemeral X25519 public key.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">ts</td>
+              <td class="text-left" rowspan="1" colspan="1">Integer</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">Seconds since Unix epoch.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">nid</td>
+              <td class="text-left" rowspan="1" colspan="1">String</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">required</td>
+              <td class="text-left" rowspan="1" colspan="1">Per-message replay identifier (e.g. UUID).</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">cty</td>
+              <td class="text-left" rowspan="1" colspan="1">String</td>
+              <td class="text-left" rowspan="1" colspan="1">optional</td>
+              <td class="text-left" rowspan="1" colspan="1">optional</td>
+              <td class="text-left" rowspan="1" colspan="1">Media type of the inner plaintext (see <a href="#cty" class="auto internal xref">Section 8.2</a>).</td>
+            </tr>
+          </tbody>
+        </table>
+<p id="section-8.1-5"><code>epk</code> is the raw 32-octet X25519 public key carried as a Structured
+Fields Byte Sequence (RFC 9651 base64, sf-binary, delimited by <code>:</code>),
+not base64url. Servers <span class="bcp14">MUST</span> reject any value whose decoded length is
+not 32 octets.<a href="#section-8.1-5" class="pilcrow">¶</a></p>
+<p id="section-8.1-6"><code>ts</code> <span class="bcp14">MUST</span> be a non-negative Integer.<a href="#section-8.1-6" class="pilcrow">¶</a></p>
+<p id="section-8.1-7"><code>nid</code> <span class="bcp14">MUST</span> contain between 1 and 128 characters and <span class="bcp14">MUST</span> match the
+regular expression <code>^[A-Za-z0-9._~-]+$</code>. <code>nid</code> comparison is
+case-sensitive.<a href="#section-8.1-7" class="pilcrow">¶</a></p>
+<p id="section-8.1-8"><code>cty</code> is <span class="bcp14">OPTIONAL</span> and, when present, <span class="bcp14">MUST</span> be the media type of the
+inner plaintext (see <a href="#cty" class="auto internal xref">Section 8.2</a>).<a href="#section-8.1-8" class="pilcrow">¶</a></p>
+<p id="section-8.1-9">Parameters defined by future revisions of this specification or by
+extensions <span class="bcp14">MUST</span> use distinct names. Recipients <span class="bcp14">MUST</span> ignore unknown
+parameters semantically, but unknown parameters remain part of the
+deterministic serialization that is authenticated as AAD. A field value
+that contains the same parameter name more than once <span class="bcp14">MUST</span> be rejected as
+<code>malformed</code>; this check <span class="bcp14">MUST</span> occur before deterministic serialization.
+Implementations whose Structured Fields parser cannot report duplicate
+parameters <span class="bcp14">MUST</span> use a parser that can for this field.<a href="#section-8.1-9" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="cty">
+<section id="section-8.2">
+        <h3 id="name-inner-content-type">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-inner-content-type" class="section-name selfRef">Inner Content Type</a>
+        </h3>
+<p id="section-8.2-1">The plaintext recovered after AES-GCM decryption is opaque to this
+specification. To allow recipients to dispatch on its format without
+a separate inner header, senders <span class="bcp14">MAY</span> include a <code>cty</code> parameter on
+the <code>E2EE-Session</code> field carrying the inner plaintext's media type as
+a String, for example <code>cty="application/json"</code> or
+<code>cty="application/cbor"</code>.<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+<p id="section-8.2-2">The value <span class="bcp14">MUST</span> be a valid media type per Section 8.3 of <span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>.
+Media-type parameters (for example, <code>charset=utf-8</code>) <span class="bcp14">MAY</span> be present
+in <code>cty</code>. Recipients <span class="bcp14">SHOULD</span> treat the absence of <code>cty</code> as
+"unspecified" and rely on out-of-band knowledge of the endpoint to
+interpret the plaintext.<a href="#section-8.2-2" class="pilcrow">¶</a></p>
+<p id="section-8.2-3">Because <code>cty</code> is a parameter of the <code>E2EE-Session</code> field, it is
+covered by the AES-GCM AAD (see <a href="#aad" class="auto internal xref">Section 7.4</a>), so an intermediary cannot
+alter the advertised inner media type without invalidating the tag.<a href="#section-8.2-3" class="pilcrow">¶</a></p>
+<p id="section-8.2-4">The outer HTTP <code>Content-Type</code> field, when present, <span class="bcp14">MUST</span> remain
+<code>application/e2ee</code> (or another media type defined for the ciphertext
+envelope); <code>cty</code> does not replace it. Recipients that receive both an
+outer <code>Content-Type</code> of <code>application/e2ee</code> and an inner <code>cty</code> <span class="bcp14">MUST</span> use
+<code>cty</code> only for the decrypted plaintext.<a href="#section-8.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="example">
+<section id="section-8.3">
+        <h3 id="name-example">
+<a href="#section-8.3" class="section-number selfRef">8.3. </a><a href="#name-example" class="section-name selfRef">Example</a>
+        </h3>
+<div class="alignLeft art-text artwork" id="section-8.3-1">
+<pre>
+E2EE-Session: "2026-06"; \
+            aead="AES-256-GCM"; \
+            epk=:rUOL+uMfbAk9YdQzklXqeYCSyfrdB7l4J/Swrp3ufBw=:; \
+            ts=1781006400; \
+            nid="3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21"; \
+            cty="application/json"
+</pre><a href="#section-8.3-1" class="pilcrow">¶</a>
+</div>
+<p id="section-8.3-2">(Line folding shown for readability; the field is a single Structured
+Field value. AAD construction uses deterministic Structured Fields
+serialization, not these presentation line breaks.)<a href="#section-8.3-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="use-in-requests-and-responses">
+<section id="section-8.4">
+        <h3 id="name-use-in-requests-and-respons">
+<a href="#section-8.4" class="section-number selfRef">8.4. </a><a href="#name-use-in-requests-and-respons" class="section-name selfRef">Use in Requests and Responses</a>
+        </h3>
+<p id="section-8.4-1">Every request that carries an encrypted payload <span class="bcp14">MUST</span> include exactly
+one <code>E2EE-Session</code> field with all required parameters. A response that
+carries an encrypted payload <span class="bcp14">MUST</span> include an <code>E2EE-Session</code> field whose
+<code>kid</code> Item value and <code>aead</code> parameter echo the request. The <code>epk</code>
+parameter <span class="bcp14">MUST</span> be omitted from responses; the server reuses the
+client's ephemeral public key from the request. The <code>ts</code> parameter on
+a response <span class="bcp14">MUST</span> reflect the server's current time. A response <span class="bcp14">MUST</span> echo
+the request's <code>nid</code> so that clients can correlate responses and detect
+duplicate or substituted responses.<a href="#section-8.4-1" class="pilcrow">¶</a></p>
+<p id="section-8.4-2">Clients <span class="bcp14">MUST</span> verify that the <code>kid</code> Item value and the <code>aead</code> and <code>nid</code>
+parameters of the response <code>E2EE-Session</code> field match the values they
+sent in the corresponding request, and <span class="bcp14">MUST</span> discard the response
+without decrypting it on mismatch. A mismatch indicates either an
+in-path attacker or a misconfigured intermediary serving a cached or
+cross-routed response. Because the request's <code>E2EE-Session</code> field is
+included in the response AAD (see <a href="#aad" class="auto internal xref">Section 7.4</a>), a mismatch is also
+detectable as an AES-GCM tag failure during decryption; the
+pre-decryption check is <span class="bcp14">RECOMMENDED</span> to avoid spending a decryption
+attempt on an obviously wrong response.<a href="#section-8.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="validation-order">
+<section id="section-8.5">
+        <h3 id="name-validation-order">
+<a href="#section-8.5" class="section-number selfRef">8.5. </a><a href="#name-validation-order" class="section-name selfRef">Validation Order</a>
+        </h3>
+<p id="section-8.5-1">Recipients <span class="bcp14">MUST</span> validate the <code>E2EE-Session</code> field before any other
+protocol step.<a href="#section-8.5-1" class="pilcrow">¶</a></p>
+<p id="section-8.5-2">For requests, servers <span class="bcp14">MUST</span> validate in the following order:<a href="#section-8.5-2" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-8.5-3">
+<li id="section-8.5-3.1">
+            <p id="section-8.5-3.1.1">Parse as a Structured Fields Item; reject as <code>malformed</code> on
+failure.<a href="#section-8.5-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.2">
+            <p id="section-8.5-3.2.1">Check that the Item value is a String, that all required request
+parameters are present, that no parameter prohibited in requests by
+<a href="#headers" class="auto internal xref">Section 8</a> is present, that no parameter name appears more than once,
+and that all known parameters have the types defined in <a href="#headers" class="auto internal xref">Section 8</a>;
+reject as <code>malformed</code> on failure.<a href="#section-8.5-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.3">
+            <p id="section-8.5-3.3.1">If <code>cty</code> is present, validate it as a media type per Section 8.3 of
+<span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>; reject as <code>malformed</code> on failure.<a href="#section-8.5-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.4">
+            <p id="section-8.5-3.4.1">Resolve <code>kid</code> against the current key set; reject as <code>key_unknown</code>
+or <code>key_expired</code>.<a href="#section-8.5-3.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.5">
+            <p id="section-8.5-3.5.1">Check <code>aead</code> against the <code>aeads</code> list for that <code>kid</code>; reject as
+<code>aead_unsupported</code>.<a href="#section-8.5-3.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.6">
+            <p id="section-8.5-3.6.1">Decode and length-check <code>epk</code>; reject as <code>malformed</code>.<a href="#section-8.5-3.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.7">
+            <p id="section-8.5-3.7.1">Check the protected body length; reject as <code>malformed</code> if it is
+shorter than 28 octets.<a href="#section-8.5-3.7.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.8">
+            <p id="section-8.5-3.8.1">Check <code>ts</code> against the selected key's <code>not_before</code>/<code>not_after</code>
+validity window and <code>max_skew</code>; reject as <code>timestamp_skew</code> if outside
+the window.<a href="#section-8.5-3.8.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.9">
+            <p id="section-8.5-3.9.1">Check <code>nid</code> against the replay cache; reject as <code>replay_detected</code>
+on hit, but do not insert the <code>nid</code> yet.<a href="#section-8.5-3.9.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.10">
+            <p id="section-8.5-3.10.1">Derive <code>EK_req</code> and attempt AES-GCM decryption; reject as
+   <code>decrypt_failed</code> on tag failure.<a href="#section-8.5-3.10.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-3.11">
+            <p id="section-8.5-3.11.1">After successful authentication and before invoking application
+   processing, insert the <code>nid</code> into the replay cache atomically.<a href="#section-8.5-3.11.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+<p id="section-8.5-4">For responses, clients <span class="bcp14">MUST</span> validate in the following order:<a href="#section-8.5-4" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-8.5-5">
+<li id="section-8.5-5.1">
+            <p id="section-8.5-5.1.1">Parse as a Structured Fields Item; reject the response on failure.<a href="#section-8.5-5.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.2">
+            <p id="section-8.5-5.2.1">Check that the Item value is a String, that all required response
+parameters are present, that <code>epk</code> is absent, that no parameter name
+appears more than once, and that all parameters known to this
+specification have the types defined in <a href="#headers" class="auto internal xref">Section 8</a>; reject the
+response on failure.<a href="#section-8.5-5.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.3">
+            <p id="section-8.5-5.3.1">If <code>cty</code> is present, validate it as a media type per Section 8.3 of
+<span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>; reject the response on failure.<a href="#section-8.5-5.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.4">
+            <p id="section-8.5-5.4.1">Check that <code>kid</code>, <code>aead</code>, and <code>nid</code> match the request.<a href="#section-8.5-5.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.5">
+            <p id="section-8.5-5.5.1">Check the protected body length; reject the response if it is
+shorter than 28 octets.<a href="#section-8.5-5.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.6">
+            <p id="section-8.5-5.6.1">Check that <code>ts</code> is a non-negative Integer and is acceptable under
+local response freshness policy.<a href="#section-8.5-5.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.5-5.7">
+            <p id="section-8.5-5.7.1">Derive <code>EK_res</code> and attempt AES-GCM decryption; reject the response
+on tag failure.<a href="#section-8.5-5.7.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+</section>
+</div>
+<div id="errors">
+<section id="section-9">
+      <h2 id="name-error-handling">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-error-handling" class="section-name selfRef">Error Handling</a>
+      </h2>
+<p id="section-9-1">When a request cannot be processed due to a protocol error, the server
+<span class="bcp14">MUST</span> respond with an HTTP error status and a Problem Details object
+<span>[<a href="#RFC9457" class="cite xref">RFC9457</a>]</span> serialized as <code>application/problem+json</code>. The <code>type</code>
+member <span class="bcp14">MUST</span> be a URI of the form:<a href="#section-9-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-9-2">
+<pre>
+urn:ietf:params:e2ee:error:&lt;code&gt;
+</pre><a href="#section-9-2" class="pilcrow">¶</a>
+</div>
+<p id="section-9-3">where <code>&lt;code&gt;</code> is one of the codes defined below. The <code>status</code> member
+<span class="bcp14">MUST</span> equal the HTTP status code of the response. The <code>title</code> member
+<span class="bcp14">SHOULD</span> be a short, fixed human-readable summary of the code. The
+<code>detail</code> member, if present, <span class="bcp14">SHOULD</span> describe the specific occurrence
+subject to the constraints in <a href="#plaintext-errors" class="auto internal xref">Section 11.6</a>.<a href="#section-9-3" class="pilcrow">¶</a></p>
+<p id="section-9-4">Example:<a href="#section-9-4" class="pilcrow">¶</a></p>
+<div class="lang-http sourcecode" id="section-9-5">
+<pre>
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{
+  "type":   "urn:ietf:params:e2ee:error:key_unknown",
+  "title":  "Key identifier is not recognized",
+  "status": 400
+}
+</pre><a href="#section-9-5" class="pilcrow">¶</a>
+</div>
+<p id="section-9-6">The following codes are defined:<a href="#section-9-6" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-9-7">
+        <dt id="section-9-7.1">key_unknown:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.2">
+          <p id="section-9-7.2.1">HTTP 400. The <code>kid</code> Item value does not match any current key.<a href="#section-9-7.2.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.3">key_expired:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.4">
+          <p id="section-9-7.4.1">HTTP 400. The referenced key is outside its <code>not_before</code>/<code>not_after</code>
+window.<a href="#section-9-7.4.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.5">aead_unsupported:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.6">
+          <p id="section-9-7.6.1">HTTP 400. The <code>aead</code> parameter is not advertised for the referenced
+<code>kid</code>, or is not recognized by the server.<a href="#section-9-7.6.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.7">decrypt_failed:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.8">
+          <p id="section-9-7.8.1">HTTP 400. AES-GCM authentication failed.<a href="#section-9-7.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.9">timestamp_skew:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.10">
+          <p id="section-9-7.10.1">HTTP 400. The <code>ts</code> parameter is outside the acceptable window (see
+<a href="#security" class="auto internal xref">Section 11</a>).<a href="#section-9-7.10.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.11">replay_detected:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.12">
+          <p id="section-9-7.12.1">HTTP 425. The server has already processed a message with this <code>nid</code>
+within the replay window. The 425 (Too Early) status <span>[<a href="#RFC8470" class="cite xref">RFC8470</a>]</span>
+is reused here to signal that the server is unwilling to process a
+request that may be a replay.<a href="#section-9-7.12.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-9-7.13">malformed:</dt>
+        <dd style="margin-left: 1.5em" id="section-9-7.14">
+          <p id="section-9-7.14.1">HTTP 400. The <code>E2EE-Session</code> field is missing, not parseable as a
+Structured Field Item, missing a required parameter, or has a
+parameter of the wrong type or length, or the protected body is too
+short to contain a nonce and tag.<a href="#section-9-7.14.1" class="pilcrow">¶</a></p>
+</dd>
+      <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="iana-considerations">
+<section id="section-10">
+      <h2 id="name-iana-considerations">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<p id="section-10-1">This document requests IANA actions in the following registries.<a href="#section-10-1" class="pilcrow">¶</a></p>
+<div id="well-known-uri-1">
+<section id="section-10.1">
+        <h3 id="name-well-known-uri-2">
+<a href="#section-10.1" class="section-number selfRef">10.1. </a><a href="#name-well-known-uri-2" class="section-name selfRef">Well-Known URI</a>
+        </h3>
+<p id="section-10.1-1">IANA is requested to register the URI suffix <code>encryption-keys</code> in the
+"Well-Known URIs" registry established by <span>[<a href="#RFC8615" class="cite xref">RFC8615</a>]</span>, with this document
+as the reference.<a href="#section-10.1-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-10.1-2">
+          <dt id="section-10.1-2.1">URI suffix:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.1-2.2">
+            <p id="section-10.1-2.2.1">encryption-keys<a href="#section-10.1-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.1-2.3">Change controller:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.1-2.4">
+            <p id="section-10.1-2.4.1">IETF<a href="#section-10.1-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.1-2.5">Status:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.1-2.6">
+            <p id="section-10.1-2.6.1">permanent<a href="#section-10.1-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.1-2.7">Specification document:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.1-2.8">
+            <p id="section-10.1-2.8.1">This document.<a href="#section-10.1-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.1-2.9">Related information:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.1-2.10">
+            <p id="section-10.1-2.10.1">This resource returns a JSON key set used by the protocol defined in
+this document.<a href="#section-10.1-2.10.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="media-type-1">
+<section id="section-10.2">
+        <h3 id="name-media-type-2">
+<a href="#section-10.2" class="section-number selfRef">10.2. </a><a href="#name-media-type-2" class="section-name selfRef">Media Type</a>
+        </h3>
+<p id="section-10.2-1">IANA is requested to register the media type <code>application/e2ee</code> in the
+"Media Types" registry, with this document as the reference and per the
+procedures in <span>[<a href="#RFC6838" class="cite xref">RFC6838</a>]</span>.<a href="#section-10.2-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-10.2-2">
+          <dt id="section-10.2-2.1">Type name:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.2">
+            <p id="section-10.2-2.2.1">application<a href="#section-10.2-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.3">Subtype name:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.4">
+            <p id="section-10.2-2.4.1">e2ee<a href="#section-10.2-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.5">Required parameters:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.6">
+            <p id="section-10.2-2.6.1">N/A<a href="#section-10.2-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.7">Optional parameters:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.8">
+            <p id="section-10.2-2.8.1">N/A<a href="#section-10.2-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.9">Encoding considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.10">
+            <p id="section-10.2-2.10.1">binary<a href="#section-10.2-2.10.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.11">Security considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.12">
+            <p id="section-10.2-2.12.1">See <a href="#security" class="auto internal xref">Section 11</a>.<a href="#section-10.2-2.12.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.13">Interoperability considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.14">
+            <p id="section-10.2-2.14.1">Implementations need to parse the <code>E2EE-Session</code> Structured Field and
+process the binary <code>nonce || ciphertext || tag</code> envelope defined by
+this document. Interoperability depends on agreement on the selected
+AEAD Identifier, the key set entry referenced by <code>kid</code>, and the AAD
+construction rules in <a href="#aad" class="auto internal xref">Section 7.4</a>.<a href="#section-10.2-2.14.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.15">Published specification:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.16">
+            <p id="section-10.2-2.16.1">This document.<a href="#section-10.2-2.16.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.17">Applications that use this media type:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.18">
+            <p id="section-10.2-2.18.1">HTTP APIs that use the encrypted payload envelope defined by this
+document.<a href="#section-10.2-2.18.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.19">Fragment identifier considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.20">
+            <p id="section-10.2-2.20.1">N/A<a href="#section-10.2-2.20.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.21">Additional information:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.22">
+            <p id="section-10.2-2.22.1">Deprecated alias names for this type: N/A
+Magic number(s): N/A
+File extension(s): N/A
+Macintosh file type code(s): N/A<a href="#section-10.2-2.22.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.23">Person and email address to contact for further information:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.24">
+            <p id="section-10.2-2.24.1">See the Authors' Addresses section.<a href="#section-10.2-2.24.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.25">Intended usage:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.26">
+            <p id="section-10.2-2.26.1">LIMITED USE<a href="#section-10.2-2.26.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.27">Restrictions on usage:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.28">
+            <p id="section-10.2-2.28.1">This media type is intended for HTTP request and response payloads that
+use the encrypted envelope defined by this document. It is not a
+general-purpose stored file format.<a href="#section-10.2-2.28.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.29">Author:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.30">
+            <p id="section-10.2-2.30.1">See the Authors' Addresses section.<a href="#section-10.2-2.30.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.2-2.31">Change controller:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.2-2.32">
+            <p id="section-10.2-2.32.1">IETF<a href="#section-10.2-2.32.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="http-field-names">
+<section id="section-10.3">
+        <h3 id="name-http-field-names">
+<a href="#section-10.3" class="section-number selfRef">10.3. </a><a href="#name-http-field-names" class="section-name selfRef">HTTP Field Names</a>
+        </h3>
+<p id="section-10.3-1">IANA is requested to register the following entry in the "Hypertext
+Transfer Protocol (HTTP) Field Name Registry":<a href="#section-10.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.3-2.1">
+            <p id="section-10.3-2.1.1">Field name: <code>E2EE-Session</code><a href="#section-10.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.2">
+            <p id="section-10.3-2.2.1">Status: permanent<a href="#section-10.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.3">
+            <p id="section-10.3-2.3.1">Structured Type: Item<a href="#section-10.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.4">
+            <p id="section-10.3-2.4.1">Reference: This document<a href="#section-10.3-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+<div id="problem-type-urn-parameter-identifier">
+<section id="section-10.4">
+        <h3 id="name-problem-type-urn-parameter-">
+<a href="#section-10.4" class="section-number selfRef">10.4. </a><a href="#name-problem-type-urn-parameter-" class="section-name selfRef">Problem Type URN Parameter Identifier</a>
+        </h3>
+<p id="section-10.4-1">IANA is requested to add the following entry to the "IETF URN
+Sub-namespace for Registered Protocol Parameter Identifiers" registry:<a href="#section-10.4-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.4-2.1">
+            <p id="section-10.4-2.1.1">Registered Parameter Identifier: <code>e2ee</code><a href="#section-10.4-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.4-2.2">
+            <p id="section-10.4-2.2.1">Reference: This document<a href="#section-10.4-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.4-2.3">
+            <p id="section-10.4-2.3.1">IANA Registry Reference: E2EE Error Codes registry, created by this
+document<a href="#section-10.4-2.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-10.4-3">The registration policy for this registry is IETF Review <span>[<a href="#RFC8126" class="cite xref">RFC8126</a>]</span>,
+as specified for the <code>urn:ietf:params</code> namespace by <span>[<a href="#RFC3553" class="cite xref">RFC3553</a>]</span>.<a href="#section-10.4-3" class="pilcrow">¶</a></p>
+<p id="section-10.4-4">The template required by <span>[<a href="#RFC3553" class="cite xref">RFC3553</a>]</span> is:<a href="#section-10.4-4" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-10.4-5">
+          <dt id="section-10.4-5.1">Registry name:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.4-5.2">
+            <p id="section-10.4-5.2.1">e2ee<a href="#section-10.4-5.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.4-5.3">Specification:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.4-5.4">
+            <p id="section-10.4-5.4.1">This document.<a href="#section-10.4-5.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.4-5.5">Repository:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.4-5.6">
+            <p id="section-10.4-5.6.1">The E2EE Error Codes registry created by this document.<a href="#section-10.4-5.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-10.4-5.7">Index value:</dt>
+          <dd style="margin-left: 1.5em" id="section-10.4-5.8">
+            <p id="section-10.4-5.8.1">A problem type URI has the form <code>urn:ietf:params:e2ee:error:&lt;code&gt;</code>,
+where <code>&lt;code&gt;</code> is a lowercase ASCII error code registered in the E2EE
+Error Codes registry. No transformation or canonicalization is applied.
+Comparison is by exact string match.<a href="#section-10.4-5.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="e2ee-error-codes">
+<section id="section-10.5">
+        <h3 id="name-e2ee-error-codes">
+<a href="#section-10.5" class="section-number selfRef">10.5. </a><a href="#name-e2ee-error-codes" class="section-name selfRef">E2EE Error Codes</a>
+        </h3>
+<p id="section-10.5-1">IANA is requested to create the "E2EE Error Codes" registry. The
+registration policy is Specification Required <span>[<a href="#RFC8126" class="cite xref">RFC8126</a>]</span>.<a href="#section-10.5-1" class="pilcrow">¶</a></p>
+<p id="section-10.5-2">Error codes are ASCII strings that <span class="bcp14">MUST</span> contain between 1 and 64
+characters and <span class="bcp14">MUST</span> match the regular expression
+<code>^[a-z][a-z0-9_]{0,63}$</code>. New registrations <span class="bcp14">MUST</span> provide:<a href="#section-10.5-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.5-3.1">
+            <p id="section-10.5-3.1.1">Error code<a href="#section-10.5-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.5-3.2">
+            <p id="section-10.5-3.2.1">HTTP status code<a href="#section-10.5-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.5-3.3">
+            <p id="section-10.5-3.3.1">Description<a href="#section-10.5-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.5-3.4">
+            <p id="section-10.5-3.4.1">Reference<a href="#section-10.5-3.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-10.5-4">The initial contents of the registry are:<a href="#section-10.5-4" class="pilcrow">¶</a></p>
+<table class="center" id="table-3">
+          <caption><a href="#table-3" class="selfRef">Table 3</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Error code</th>
+              <th class="text-left" rowspan="1" colspan="1">HTTP status</th>
+              <th class="text-left" rowspan="1" colspan="1">Description</th>
+              <th class="text-left" rowspan="1" colspan="1">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">key_unknown</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">Key identifier is not recognized.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">key_expired</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">Key identifier is outside its validity.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">aead_unsupported</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">AEAD identifier is not supported.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">decrypt_failed</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">AEAD authentication failed.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">timestamp_skew</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">Timestamp is outside the accepted window.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">replay_detected</td>
+              <td class="text-left" rowspan="1" colspan="1">425</td>
+              <td class="text-left" rowspan="1" colspan="1">Replay identifier was already observed.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">malformed</td>
+              <td class="text-left" rowspan="1" colspan="1">400</td>
+              <td class="text-left" rowspan="1" colspan="1">Protocol metadata or body is malformed.</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+</section>
+</div>
+<div id="security">
+<section id="section-11">
+      <h2 id="name-security-considerations">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<div id="threat-model">
+<section id="section-11.1">
+        <h3 id="name-threat-model">
+<a href="#section-11.1" class="section-number selfRef">11.1. </a><a href="#name-threat-model" class="section-name selfRef">Threat Model</a>
+        </h3>
+<p id="section-11.1-1">This scheme is designed to protect the confidentiality and integrity of
+request and response payloads against:<a href="#section-11.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-11.1-2.1">
+            <p id="section-11.1-2.1.1">Intermediaries that terminate TLS (reverse proxies, CDNs, API
+gateways), and<a href="#section-11.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.1-2.2">
+            <p id="section-11.1-2.2.1">Passive observers of any plaintext channel between the TLS
+terminator and the application backend.<a href="#section-11.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-11.1-3">It is not designed to protect HTTP metadata (method, path, headers other
+than the protected body, response status) or to defeat traffic analysis.
+It does not authenticate the client by itself. Client authentication
+<span class="bcp14">MAY</span> be layered on top using the protected payload (for example, bearer
+tokens carried inside the ciphertext) or, preferably, by signing the
+request with HTTP Message Signatures <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span>; in the latter case
+the signature input <span class="bcp14">MUST</span> include the <code>E2EE-Session</code> field and the
+<code>Content-Digest</code> field over the ciphertext body so that the signature
+also binds the AAD and ciphertext.<a href="#section-11.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="transport-layer-security">
+<section id="section-11.2">
+        <h3 id="name-transport-layer-security">
+<a href="#section-11.2" class="section-number selfRef">11.2. </a><a href="#name-transport-layer-security" class="section-name selfRef">Transport Layer Security</a>
+        </h3>
+<p id="section-11.2-1">This scheme <span class="bcp14">MUST</span> be used over TLS <span>[<a href="#RFC8446" class="cite xref">RFC8446</a>]</span> configured per current
+best practice <span>[<a href="#RFC9325" class="cite xref">RFC9325</a>]</span>. TLS protects request metadata, the Well-Known
+key set retrieval, and provides server authentication.<a href="#section-11.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="server-authentication-and-key-trust">
+<section id="section-11.3">
+        <h3 id="name-server-authentication-and-k">
+<a href="#section-11.3" class="section-number selfRef">11.3. </a><a href="#name-server-authentication-and-k" class="section-name selfRef">Server Authentication and Key Trust</a>
+        </h3>
+<p id="section-11.3-1">When the TLS endpoint that serves the Well-Known URI is also the
+application endpoint trusted with plaintext payloads, the server's
+identity is authenticated by the TLS certificate of that host and by the
+<code>issuer</code> value in the key set.<a href="#section-11.3-1" class="pilcrow">¶</a></p>
+<p id="section-11.3-2">When TLS-terminating intermediaries are present and are not trusted with
+plaintext payloads, TLS authentication alone does not authenticate the
+encryption keys end to end. In that deployment, clients <span class="bcp14">MUST</span> verify the
+<code>fingerprint</code> of any key they use against a value obtained out of band
+(for example, distributed with the client software) or <span class="bcp14">MUST</span> verify a
+signature over the key set using a signing key distributed out of band.
+Mobile and desktop client implementations are <span class="bcp14">RECOMMENDED</span> to pin at
+least one fingerprint or signing key.<a href="#section-11.3-2" class="pilcrow">¶</a></p>
+<p id="section-11.3-3">Where stronger guarantees are required, servers <span class="bcp14">SHOULD</span> sign the key
+set with HTTP Message Signatures <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span> and cover the body with
+a <code>Content-Digest</code> field <span>[<a href="#RFC9530" class="cite xref">RFC9530</a>]</span>. The signing key is necessarily
+distributed out of band; clients that pin the signing key obtain key
+authenticity that is independent of the Web PKI used by TLS.<a href="#section-11.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="forward-secrecy">
+<section id="section-11.4">
+        <h3 id="name-forward-secrecy">
+<a href="#section-11.4" class="section-number selfRef">11.4. </a><a href="#name-forward-secrecy" class="section-name selfRef">Forward Secrecy</a>
+        </h3>
+<p id="section-11.4-1">The client's key pair is ephemeral, but the server's published key is
+static for the lifetime of its key set entry. The scheme therefore
+provides forward secrecy only with respect to client-side compromise.
+Compromise of a server private key allows decryption of all sessions
+that used it.<a href="#section-11.4-1" class="pilcrow">¶</a></p>
+<p id="section-11.4-2">Operators <span class="bcp14">SHOULD</span> rotate server keys frequently and use short
+<code>not_after</code> windows. Implementations of this specification <span class="bcp14">SHOULD</span>
+publish at least two overlapping keys in the key set to enable
+seamless rotation.<a href="#section-11.4-2" class="pilcrow">¶</a></p>
+<p id="section-11.4-3">A future revision of this protocol <span class="bcp14">MAY</span> define a mode in which the
+server returns a fresh ephemeral public key on first contact, providing
+full perfect forward secrecy at the cost of an additional round trip.<a href="#section-11.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="replay-protection">
+<section id="section-11.5">
+        <h3 id="name-replay-protection">
+<a href="#section-11.5" class="section-number selfRef">11.5. </a><a href="#name-replay-protection" class="section-name selfRef">Replay Protection</a>
+        </h3>
+<p id="section-11.5-1">Servers <span class="bcp14">MUST</span> validate the <code>ts</code> parameter against the key validity
+window for the referenced <code>kid</code>: any <code>ts</code> before <code>not_before</code>, when
+present, or after <code>not_after</code> <span class="bcp14">MUST</span> be rejected (<code>timestamp_skew</code>).
+Servers <span class="bcp14">MUST</span> also reject any <code>ts</code> whose absolute difference from the
+server clock exceeds the key set entry's <code>max_skew</code> value
+(<code>timestamp_skew</code>).<a href="#section-11.5-1" class="pilcrow">¶</a></p>
+<p id="section-11.5-2">Servers <span class="bcp14">SHOULD</span> publish a <code>max_skew</code> value no larger than the maximum
+retry interval they are willing to support; a value of 300 seconds is
+<span class="bcp14">RECOMMENDED</span> unless the deployment has stricter clock synchronization or
+longer retry requirements.<a href="#section-11.5-2" class="pilcrow">¶</a></p>
+<p id="section-11.5-3">Clients <span class="bcp14">MUST</span> read <code>max_skew</code> from the selected key set entry and account
+for it when scheduling retries. A retry sent with a fresh <code>nid</code> after
+the original request's timestamp has aged beyond <code>max_skew</code> is expected
+to fail timestamp validation.<a href="#section-11.5-3" class="pilcrow">¶</a></p>
+<p id="section-11.5-4">Servers <span class="bcp14">MUST</span> maintain a cache of recently seen <code>nid</code> values, keyed
+by <code>(kid, epk)</code>, for at least <code>max_skew</code> plus a small tolerance for
+processing latency and clock granularity. A repeated <code>nid</code> <span class="bcp14">MUST</span> result
+in <code>replay_detected</code>.
+Clients <span class="bcp14">MUST</span> generate a fresh, unpredictable <code>nid</code> for every
+request; a version 4 UUID or any 128-bit value drawn from a
+cryptographically secure random number generator is sufficient.<a href="#section-11.5-4" class="pilcrow">¶</a></p>
+<p id="section-11.5-5">Servers <span class="bcp14">MUST NOT</span> insert a <code>nid</code> into the replay cache until the
+request has been authenticated successfully by AES-GCM. Inserting a
+<code>nid</code> before tag verification would allow an attacker to poison the
+replay cache with unauthenticated requests. Servers <span class="bcp14">MUST</span> insert the
+<code>nid</code> atomically after successful authentication and before application
+side effects occur; if another request with the same <code>(kid, epk, nid)</code>
+wins that atomic insertion, the later request <span class="bcp14">MUST</span> fail with
+<code>replay_detected</code>.<a href="#section-11.5-5" class="pilcrow">¶</a></p>
+<p id="section-11.5-6">The <code>nid</code> parameter is an anti-replay identifier and is not an
+application idempotency key. The two have opposite behavior on a cache
+hit: a duplicate <code>nid</code> <span class="bcp14">MUST</span> cause the server to reject the request,
+whereas a duplicate application idempotency key is normally expected to
+cause the server to return the stored response of the original request.
+Applications that require both fault-tolerant retries and end-to-end
+replay protection <span class="bcp14">MUST</span> use distinct values for the two purposes. An
+application idempotency key, if used, <span class="bcp14">SHOULD</span> be carried inside the
+encrypted payload so that the application sees it but intermediaries do
+not, and so that it is bound to the request by the AES-GCM tag.<a href="#section-11.5-6" class="pilcrow">¶</a></p>
+<p id="section-11.5-7">The 12-byte AES-GCM nonce is independently random per message and <span class="bcp14">MUST NOT</span> be reused under the same direction-specific EK.<a href="#section-11.5-7" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="plaintext-errors">
+<section id="section-11.6">
+        <h3 id="name-plaintext-error-responses">
+<a href="#section-11.6" class="section-number selfRef">11.6. </a><a href="#name-plaintext-error-responses" class="section-name selfRef">Plaintext Error Responses</a>
+        </h3>
+<p id="section-11.6-1">Error responses defined in <a href="#errors" class="auto internal xref">Section 9</a> are sent as Problem Details
+<span>[<a href="#RFC9457" class="cite xref">RFC9457</a>]</span> in plaintext and are therefore visible to any
+TLS-terminating intermediary. Error responses do not carry encrypted
+application payloads and do not require an <code>E2EE-Session</code> field; some
+errors occur before the request <code>E2EE-Session</code> field can be parsed safely.<a href="#section-11.6-1" class="pilcrow">¶</a></p>
+<p id="section-11.6-2">Operators <span class="bcp14">MUST</span> treat error metadata as observable to intermediaries.
+In particular:<a href="#section-11.6-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-11.6-3.1">
+            <p id="section-11.6-3.1.1">The <code>detail</code> and <code>instance</code> members of the Problem Details object
+<span class="bcp14">MUST NOT</span> contain user identifiers, request contents, stack traces,
+or any value derived from the decrypted plaintext.<a href="#section-11.6-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.6-3.2">
+            <p id="section-11.6-3.2.1">The <code>title</code> member <span class="bcp14">SHOULD</span> be a fixed string per error code and
+<span class="bcp14">MUST NOT</span> vary with request content.<a href="#section-11.6-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.6-3.3">
+            <p id="section-11.6-3.3.1">Extension members defined by future revisions or by deployments
+<span class="bcp14">MUST</span> be subject to the same constraints.<a href="#section-11.6-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.6-3.4">
+            <p id="section-11.6-3.4.1">Error <code>type</code> URIs <span class="bcp14">SHOULD</span> be chosen from the fixed set in
+<a href="#errors" class="auto internal xref">Section 9</a>; application-specific error information <span class="bcp14">SHOULD</span> instead
+be returned as an encrypted payload with an appropriate HTTP
+status.<a href="#section-11.6-3.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.6-3.5">
+            <p id="section-11.6-3.5.1">The presence of <code>decrypt_failed</code> or <code>replay_detected</code> reveals to
+an observer that an attack or a stale retry occurred; this is
+considered acceptable as it aids defenders more than attackers.<a href="#section-11.6-3.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-11.6-4">Successful responses <span class="bcp14">MUST</span> carry their application payload encrypted
+under this specification; servers <span class="bcp14">MUST NOT</span> fall back to a plaintext
+success response when the request was encrypted.<a href="#section-11.6-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="key-rotation">
+<section id="section-11.7">
+        <h3 id="name-key-rotation">
+<a href="#section-11.7" class="section-number selfRef">11.7. </a><a href="#name-key-rotation" class="section-name selfRef">Key Rotation</a>
+        </h3>
+<p id="section-11.7-1">Each request carries a <code>kid</code>, allowing the server to retain the private
+keys associated with all currently valid <code>kid</code>s and decrypt requests
+that arrive during a rotation. Clients <span class="bcp14">MUST</span> refresh the key set when
+the cached entry has expired, when no key remains within its validity
+window, or on <code>key_unknown</code>.<a href="#section-11.7-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="algorithm-agility">
+<section id="section-11.8">
+        <h3 id="name-algorithm-agility">
+<a href="#section-11.8" class="section-number selfRef">11.8. </a><a href="#name-algorithm-agility" class="section-name selfRef">Algorithm Agility</a>
+        </h3>
+<p id="section-11.8-1">This document specifies one key agreement algorithm (X25519), one
+key-derivation function (HKDF-SHA256), and three AEAD variants
+(AES-128/192/256-GCM). Servers <span class="bcp14">MAY</span> publish keys with <code>alg</code> values or
+list <code>aeads</code> entries defined by future specifications; clients that do
+not recognize an <code>alg</code> <span class="bcp14">MUST</span> ignore the key, and clients that do not
+recognize any of the <code>aeads</code> entries for a key <span class="bcp14">MUST</span> treat the key as
+unusable.<a href="#section-11.8-1" class="pilcrow">¶</a></p>
+<p id="section-11.8-2">AES-128-GCM and AES-256-GCM are mandatory to implement; AES-192-GCM is
+<span class="bcp14">OPTIONAL</span> because the 192-bit variant is rarely accelerated in hardware
+and provides no security advantage over AES-128-GCM in this setting.
+Implementations <span class="bcp14">SHOULD</span> prefer AES-256-GCM by default. AES-128-GCM is
+acceptable when interoperability or constrained-device performance
+takes precedence. Implementations <span class="bcp14">MUST</span> reject any single plaintext that
+exceeds the AES-GCM per-invocation input limit (approximately
+2^39 - 256 bits per <span>[<a href="#NIST-SP-800-38D" class="cite xref">NIST-SP-800-38D</a>]</span>). Deployments that reuse a
+client session across multiple requests <span class="bcp14">SHOULD</span> also enforce a maximum
+number of messages per direction-specific EK; with randomly generated
+96-bit nonces, 2^32 messages under one direction-specific EK is an upper
+bound and is far above typical API usage.<a href="#section-11.8-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="side-channels-and-implementation">
+<section id="section-11.9">
+        <h3 id="name-side-channels-and-implement">
+<a href="#section-11.9" class="section-number selfRef">11.9. </a><a href="#name-side-channels-and-implement" class="section-name selfRef">Side Channels and Implementation</a>
+        </h3>
+<p id="section-11.9-1">X25519 implementations <span class="bcp14">MUST</span> be constant-time per <span>[<a href="#RFC7748" class="cite xref">RFC7748</a>]</span>. AES-GCM
+implementations <span class="bcp14">SHOULD</span> use hardware acceleration where available to
+reduce the risk of cache-timing leaks. HKDF and base64url
+implementations <span class="bcp14">MUST</span> validate input lengths to avoid out-of-bounds
+reads.<a href="#section-11.9-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="denial-of-service">
+<section id="section-11.10">
+        <h3 id="name-denial-of-service">
+<a href="#section-11.10" class="section-number selfRef">11.10. </a><a href="#name-denial-of-service" class="section-name selfRef">Denial of Service</a>
+        </h3>
+<p id="section-11.10-1">Decryption is comparatively cheap, but X25519 scalar multiplication is
+not free. Servers <span class="bcp14">SHOULD</span> rate-limit requests bearing unknown or
+expired <code>kid</code>s, and <span class="bcp14">SHOULD</span> reject malformed bodies before performing
+key agreement.<a href="#section-11.10-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="comparison-with-transport-layer-solutions">
+<section id="section-11.11">
+        <h3 id="name-comparison-with-transport-l">
+<a href="#section-11.11" class="section-number selfRef">11.11. </a><a href="#name-comparison-with-transport-l" class="section-name selfRef">Comparison with Transport-Layer Solutions</a>
+        </h3>
+<p id="section-11.11-1">This scheme is complementary to, and not a replacement for, alternatives
+such as mTLS or QUIC <span>[<a href="#RFC9000" class="cite xref">RFC9000</a>]</span>. It is specifically targeted at
+deployments where TLS-terminating intermediaries are part of the
+application architecture and removing them is not feasible.<a href="#section-11.11-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="privacy-considerations">
+<section id="section-12">
+      <h2 id="name-privacy-considerations">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-privacy-considerations" class="section-name selfRef">Privacy Considerations</a>
+      </h2>
+<p id="section-12-1">This protocol improves payload confidentiality from the perspective of
+TLS-terminating intermediaries, but it does not hide HTTP metadata.
+Intermediaries can still observe the client and server endpoints, request
+timing, request method, target URI, status code, message sizes, and all
+unprotected HTTP fields. Applications that carry privacy-sensitive values
+in URIs or unprotected headers will still expose those values.<a href="#section-12-1" class="pilcrow">¶</a></p>
+<p id="section-12-2">The <code>E2EE-Session</code> field is also visible to intermediaries. Its <code>kid</code>,
+<code>aead</code>, <code>ts</code>, <code>nid</code>, <code>epk</code>, and <code>cty</code> parameters can reveal deployment
+state, timing, retry behavior, client session scope, and the media type
+of the inner plaintext. Clients that need to reduce linkability <span class="bcp14">SHOULD</span>
+use the default per-request client key scope and generate fresh <code>nid</code>
+values for every request.<a href="#section-12-2" class="pilcrow">¶</a></p>
+<p id="section-12-3">Plaintext error responses expose protocol failure information, as
+described in <a href="#plaintext-errors" class="auto internal xref">Section 11.6</a>. Deployments <span class="bcp14">SHOULD</span> avoid putting
+user-specific or content-derived information in error details and <span class="bcp14">SHOULD</span>
+carry application-specific error information inside encrypted response
+payloads when feasible.<a href="#section-12-3" class="pilcrow">¶</a></p>
+<p id="section-12-4">These considerations are intended to supplement the privacy guidance in
+<span>[<a href="#RFC6973" class="cite xref">RFC6973</a>]</span>.<a href="#section-12-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-combined-references">
+<section id="section-13">
+      <h2 id="name-references">
+<a href="#section-13" class="section-number selfRef">13. </a><a href="#name-references" class="section-name selfRef">References</a>
+      </h2>
+<div id="sec-normative-references">
+<section id="section-13.1">
+        <h3 id="name-normative-references">
+<a href="#section-13.1" class="section-number selfRef">13.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="NIST-SP-800-38D">[NIST-SP-800-38D]</dt>
+        <dd>
+<span class="refAuthor">National Institute of Standards and Technology</span>, <span class="refTitle">"Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC"</span>, <span class="seriesInfo">NIST Special Publication 800-38D</span>, <time datetime="2007" class="refDate">2007</time>. </dd>
+<dd class="break"></dd>
+<dt id="RFC2119">[RFC2119]</dt>
+        <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC3339">[RFC3339]</dt>
+        <dd>
+<span class="refAuthor">Klyne, G.</span> and <span class="refAuthor">C. Newman</span>, <span class="refTitle">"Date and Time on the Internet: Timestamps"</span>, <span class="seriesInfo">RFC 3339</span>, <span class="seriesInfo">DOI 10.17487/RFC3339</span>, <time datetime="2002-07" class="refDate">July 2002</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc3339">https://www.rfc-editor.org/rfc/rfc3339</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC3553">[RFC3553]</dt>
+        <dd>
+<span class="refAuthor">Mealling, M.</span>, <span class="refAuthor">Masinter, L.</span>, <span class="refAuthor">Hardie, T.</span>, and <span class="refAuthor">G. Klyne</span>, <span class="refTitle">"An IETF URN Sub-namespace for Registered Protocol Parameters"</span>, <span class="seriesInfo">BCP 73</span>, <span class="seriesInfo">RFC 3553</span>, <span class="seriesInfo">DOI 10.17487/RFC3553</span>, <time datetime="2003-06" class="refDate">June 2003</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc3553">https://www.rfc-editor.org/rfc/rfc3553</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC4648">[RFC4648]</dt>
+        <dd>
+<span class="refAuthor">Josefsson, S.</span>, <span class="refTitle">"The Base16, Base32, and Base64 Data Encodings"</span>, <span class="seriesInfo">RFC 4648</span>, <span class="seriesInfo">DOI 10.17487/RFC4648</span>, <time datetime="2006-10" class="refDate">October 2006</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc4648">https://www.rfc-editor.org/rfc/rfc4648</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC5869">[RFC5869]</dt>
+        <dd>
+<span class="refAuthor">Krawczyk, H.</span> and <span class="refAuthor">P. Eronen</span>, <span class="refTitle">"HMAC-based Extract-and-Expand Key Derivation Function (HKDF)"</span>, <span class="seriesInfo">RFC 5869</span>, <span class="seriesInfo">DOI 10.17487/RFC5869</span>, <time datetime="2010-05" class="refDate">May 2010</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc5869">https://www.rfc-editor.org/rfc/rfc5869</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6838">[RFC6838]</dt>
+        <dd>
+<span class="refAuthor">Freed, N.</span>, <span class="refAuthor">Klensin, J.</span>, and <span class="refAuthor">T. Hansen</span>, <span class="refTitle">"Media Type Specifications and Registration Procedures"</span>, <span class="seriesInfo">BCP 13</span>, <span class="seriesInfo">RFC 6838</span>, <span class="seriesInfo">DOI 10.17487/RFC6838</span>, <time datetime="2013-01" class="refDate">January 2013</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6838">https://www.rfc-editor.org/rfc/rfc6838</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7748">[RFC7748]</dt>
+        <dd>
+<span class="refAuthor">Langley, A.</span>, <span class="refAuthor">Hamburg, M.</span>, and <span class="refAuthor">S. Turner</span>, <span class="refTitle">"Elliptic Curves for Security"</span>, <span class="seriesInfo">RFC 7748</span>, <span class="seriesInfo">DOI 10.17487/RFC7748</span>, <time datetime="2016-01" class="refDate">January 2016</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7748">https://www.rfc-editor.org/rfc/rfc7748</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8126">[RFC8126]</dt>
+        <dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refAuthor">Leiba, B.</span>, and <span class="refAuthor">T. Narten</span>, <span class="refTitle">"Guidelines for Writing an IANA Considerations Section in RFCs"</span>, <span class="seriesInfo">BCP 26</span>, <span class="seriesInfo">RFC 8126</span>, <span class="seriesInfo">DOI 10.17487/RFC8126</span>, <time datetime="2017-06" class="refDate">June 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8126">https://www.rfc-editor.org/rfc/rfc8126</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+        <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8446">[RFC8446]</dt>
+        <dd>
+<span class="refAuthor">Rescorla, E.</span>, <span class="refTitle">"The Transport Layer Security (TLS) Protocol Version 1.3"</span>, <span class="seriesInfo">RFC 8446</span>, <span class="seriesInfo">DOI 10.17487/RFC8446</span>, <time datetime="2018-08" class="refDate">August 2018</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8446">https://www.rfc-editor.org/rfc/rfc8446</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8470">[RFC8470]</dt>
+        <dd>
+<span class="refAuthor">Thomson, M.</span>, <span class="refAuthor">Nottingham, M.</span>, and <span class="refAuthor">W. Tarreau</span>, <span class="refTitle">"Using Early Data in HTTP"</span>, <span class="seriesInfo">RFC 8470</span>, <span class="seriesInfo">DOI 10.17487/RFC8470</span>, <time datetime="2018-09" class="refDate">September 2018</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8470">https://www.rfc-editor.org/rfc/rfc8470</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8615">[RFC8615]</dt>
+        <dd>
+<span class="refAuthor">Nottingham, M.</span>, <span class="refTitle">"Well-Known Uniform Resource Identifiers (URIs)"</span>, <span class="seriesInfo">RFC 8615</span>, <span class="seriesInfo">DOI 10.17487/RFC8615</span>, <time datetime="2019-05" class="refDate">May 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8615">https://www.rfc-editor.org/rfc/rfc8615</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9110">[RFC9110]</dt>
+        <dd>
+<span class="refAuthor">Fielding, R., Ed.</span>, <span class="refAuthor">Nottingham, M., Ed.</span>, and <span class="refAuthor">J. Reschke, Ed.</span>, <span class="refTitle">"HTTP Semantics"</span>, <span class="seriesInfo">STD 97</span>, <span class="seriesInfo">RFC 9110</span>, <span class="seriesInfo">DOI 10.17487/RFC9110</span>, <time datetime="2022-06" class="refDate">June 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9110">https://www.rfc-editor.org/rfc/rfc9110</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9325">[RFC9325]</dt>
+        <dd>
+<span class="refAuthor">Sheffer, Y.</span>, <span class="refAuthor">Saint-Andre, P.</span>, and <span class="refAuthor">T. Fossati</span>, <span class="refTitle">"Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)"</span>, <span class="seriesInfo">BCP 195</span>, <span class="seriesInfo">RFC 9325</span>, <span class="seriesInfo">DOI 10.17487/RFC9325</span>, <time datetime="2022-11" class="refDate">November 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9325">https://www.rfc-editor.org/rfc/rfc9325</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9421">[RFC9421]</dt>
+        <dd>
+<span class="refAuthor">Backman, A., Ed.</span>, <span class="refAuthor">Richer, J., Ed.</span>, and <span class="refAuthor">M. Sporny</span>, <span class="refTitle">"HTTP Message Signatures"</span>, <span class="seriesInfo">RFC 9421</span>, <span class="seriesInfo">DOI 10.17487/RFC9421</span>, <time datetime="2024-02" class="refDate">February 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9421">https://www.rfc-editor.org/rfc/rfc9421</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9457">[RFC9457]</dt>
+        <dd>
+<span class="refAuthor">Nottingham, M.</span>, <span class="refAuthor">Wilde, E.</span>, and <span class="refAuthor">S. Dalal</span>, <span class="refTitle">"Problem Details for HTTP APIs"</span>, <span class="seriesInfo">RFC 9457</span>, <span class="seriesInfo">DOI 10.17487/RFC9457</span>, <time datetime="2023-07" class="refDate">July 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9457">https://www.rfc-editor.org/rfc/rfc9457</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9530">[RFC9530]</dt>
+        <dd>
+<span class="refAuthor">Polli, R.</span> and <span class="refAuthor">L. Pardue</span>, <span class="refTitle">"Digest Fields"</span>, <span class="seriesInfo">RFC 9530</span>, <span class="seriesInfo">DOI 10.17487/RFC9530</span>, <time datetime="2024-02" class="refDate">February 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9530">https://www.rfc-editor.org/rfc/rfc9530</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9651">[RFC9651]</dt>
+      <dd>
+<span class="refAuthor">Nottingham, M.</span> and <span class="refAuthor">P. Kamp</span>, <span class="refTitle">"Structured Field Values for HTTP"</span>, <span class="seriesInfo">RFC 9651</span>, <span class="seriesInfo">DOI 10.17487/RFC9651</span>, <time datetime="2024-09" class="refDate">September 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9651">https://www.rfc-editor.org/rfc/rfc9651</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="sec-informative-references">
+<section id="section-13.2">
+        <h3 id="name-informative-references">
+<a href="#section-13.2" class="section-number selfRef">13.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="RFC6973">[RFC6973]</dt>
+        <dd>
+<span class="refAuthor">Cooper, A.</span>, <span class="refAuthor">Tschofenig, H.</span>, <span class="refAuthor">Aboba, B.</span>, <span class="refAuthor">Peterson, J.</span>, <span class="refAuthor">Morris, J.</span>, <span class="refAuthor">Hansen, M.</span>, and <span class="refAuthor">R. Smith</span>, <span class="refTitle">"Privacy Considerations for Internet Protocols"</span>, <span class="seriesInfo">RFC 6973</span>, <span class="seriesInfo">DOI 10.17487/RFC6973</span>, <time datetime="2013-07" class="refDate">July 2013</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6973">https://www.rfc-editor.org/rfc/rfc6973</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9000">[RFC9000]</dt>
+        <dd>
+<span class="refAuthor">Iyengar, J., Ed.</span> and <span class="refAuthor">M. Thomson, Ed.</span>, <span class="refTitle">"QUIC: A UDP-Based Multiplexed and Secure Transport"</span>, <span class="seriesInfo">RFC 9000</span>, <span class="seriesInfo">DOI 10.17487/RFC9000</span>, <time datetime="2021-05" class="refDate">May 2021</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9000">https://www.rfc-editor.org/rfc/rfc9000</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="VASYLENKO-BLOG">[VASYLENKO-BLOG]</dt>
+      <dd>
+<span class="refAuthor">Vasylenko, V.</span>, <span class="refTitle">"End-to-End Encryption for APIs: X25519 and AES"</span>, <time datetime="2025-07-27" class="refDate">27 July 2025</time>, <span>&lt;<a href="https://blog.vitalvas.com/post/2025/07/27/e2e-encryption-api-x25519-aes/">https://blog.vitalvas.com/post/2025/07/27/e2e-encryption-api-x25519-aes/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="acknowledgments">
+<section id="appendix-A">
+      <h2 id="name-acknowledgments">
+<a href="#name-acknowledgments" class="section-name selfRef">Acknowledgments</a>
+      </h2>
+<p id="appendix-A-1">The protocol described in this document derives from an informal
+blog-post implementation of end-to-end encryption for HTTP APIs using
+X25519 and AES-GCM <span>[<a href="#VASYLENKO-BLOG" class="cite xref">VASYLENKO-BLOG</a>]</span>. This document formalizes the
+wire format, generalizes the cipher to AES-128/192/256-GCM with
+explicit negotiation, specifies additional authenticated data and
+replay protection, and defines key rotation semantics.<a href="#appendix-A-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="worked-example">
+<section id="appendix-B">
+      <h2 id="name-worked-example">
+<a href="#name-worked-example" class="section-name selfRef">Worked Example</a>
+      </h2>
+<p id="appendix-B-1">This appendix shows one complete request/response pair using
+deterministic inputs. All values are hexadecimal unless noted; lines
+of the form <code>=</code> are byte-identical to what an interoperable
+implementation would compute. The inputs (private keys, AES-GCM
+nonces) are fixed so the example is reproducible; production code
+<span class="bcp14">MUST NOT</span> reuse these values.<a href="#appendix-B-1" class="pilcrow">¶</a></p>
+<div id="inputs">
+<section id="appendix-B.1">
+        <h3 id="name-inputs">
+<a href="#name-inputs" class="section-name selfRef">Inputs</a>
+        </h3>
+<div class="alignLeft art-text artwork" id="appendix-B.1-1">
+<pre>
+server private (ssk) =
+    0102030405060708090a0b0c0d0e0f10
+    1112131415161718191a1b1c1d1e1f20
+server public  (spk) =
+    07a37cbc142093c8b755dc1b10e86cb4
+    26374ad16aa853ed0bdfc0b2b86d1c7c
+
+client private (csk) =
+    a1a2a3a4a5a6a7a8a9aaabacadaeafb0
+    b1b2b3b4b5b6b7b8b9babbbcbdbebfc0
+client public  (cpk) =
+    ad438bfae31f6c093d61d4339255ea79
+    8092c9fadd07b97827f4b0ae9dee7c1c
+
+kid  = "2026-06"
+aead = "AES-256-GCM"
+issuer = "https://api.example.com"
+ts   = 1781006400
+nid  = "3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21"
+cty  = "application/json"
+</pre><a href="#appendix-B.1-1" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="key-agreement-and-derivation-1">
+<section id="appendix-B.2">
+        <h3 id="name-key-agreement-and-derivation">
+<a href="#name-key-agreement-and-derivation" class="section-name selfRef">Key Agreement and Derivation</a>
+        </h3>
+<div class="alignLeft art-text artwork" id="appendix-B.2-1">
+<pre>
+Z   = X25519(csk, spk)
+    = 1eadf045f970f3619aa3a82d3ce461d6
+      8ee42839f0563ff052d8db20bf927d29
+
+salt = cpk || spk    (64 octets)
+info_req = "e2ee/v1:req https://api.example.com AES-256-GCM 2026-06"
+info_res = "e2ee/v1:res https://api.example.com AES-256-GCM 2026-06"
+
+EK_req = HKDF-SHA256(Z, salt, info_req, 32)
+       = 88927bb69c7fce5a26b88ccf3b8638c5
+         e876080eae5349c7a014787e80382f81
+
+EK_res = HKDF-SHA256(Z, salt, info_res, 32)
+       = 2784f1a637499c327e97ad56a0a199b9
+         50680c41e57597cea41a220233304a8b
+</pre><a href="#appendix-B.2-1" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="request">
+<section id="appendix-B.3">
+        <h3 id="name-request">
+<a href="#name-request" class="section-name selfRef">Request</a>
+        </h3>
+<p id="appendix-B.3-1">The serialized <code>E2EE-Session</code> field (single logical line):<a href="#appendix-B.3-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.3-2">
+<pre>
+E2EE-Session: "2026-06"; aead="AES-256-GCM";
+            epk=:rUOL+uMfbAk9YdQzklXqeYCSyfrdB7l4J/Swrp3ufBw=:;
+            ts=1781006400;
+            nid="3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21";
+            cty="application/json"
+</pre><a href="#appendix-B.3-2" class="pilcrow">¶</a>
+</div>
+<p id="appendix-B.3-3">The AAD is the ASCII string below, using deterministic Structured
+Fields serialization of the <code>E2EE-Session</code> field value:<a href="#appendix-B.3-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.3-4">
+<pre>
+e2ee/v1:req "2026-06"; aead="AES-256-GCM"; epk=:...:; \
+ts=1781006400; nid="3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21"; \
+cty="application/json"
+</pre><a href="#appendix-B.3-4" class="pilcrow">¶</a>
+</div>
+<p id="appendix-B.3-5">(The <code>:...:</code> here stands for the full sf-binary form shown above and is
+shortened only for readability; the actual AAD contains the full
+deterministic serialization.)<a href="#appendix-B.3-5" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.3-6">
+<pre>
+plaintext = {"op":"transfer","amount":1000,"to":"acct-42"}
+
+nonce     = deadbeef0000000000000001
+ciphertext =
+    a6b3551bec16e7866943502146d893b2
+    baa8bc6a4ef76712f7e4febcb576c821
+    41551464b46eb0f096750ed69020
+tag       =
+    4cc3c77e4c463d111f81bf6cf83f08d5
+</pre><a href="#appendix-B.3-6" class="pilcrow">¶</a>
+</div>
+<p id="appendix-B.3-7">The HTTP request body is <code>nonce || ciphertext || tag</code>, base64-encoded
+here for compactness:<a href="#appendix-B.3-7" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.3-8">
+<pre>
+body (base64) =
+    3q2+7wAAAAAAAAABprNVG+wW54ZpQ1AhRtiTsrqovGpO92cS
+    9+T+vLV2yCFBVRRktG6w8JZ1DtaQIEzDx35MRj0RH4G/bPg/CNU=
+</pre><a href="#appendix-B.3-8" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="response">
+<section id="appendix-B.4">
+        <h3 id="name-response">
+<a href="#name-response" class="section-name selfRef">Response</a>
+        </h3>
+<p id="appendix-B.4-1">The response uses a fresh nonce and a new <code>ts</code>, echoes <code>kid</code>, <code>aead</code>,
+and <code>nid</code>, and omits <code>epk</code>:<a href="#appendix-B.4-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.4-2">
+<pre>
+E2EE-Session: "2026-06"; aead="AES-256-GCM";
+            ts=1781006401;
+            nid="3b1c1c2e-2b6a-4a0d-9b6c-2a9f1b6a0e21";
+            cty="application/json"
+</pre><a href="#appendix-B.4-2" class="pilcrow">¶</a>
+</div>
+<p id="appendix-B.4-3">AAD (the request's deterministic field serialization followed by the
+response's deterministic field serialization):<a href="#appendix-B.4-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-B.4-4">
+<pre>
+e2ee/v1:res &lt;request-encryption-field&gt; &lt;response-encryption-field&gt;
+
+plaintext = {"status":"ok","txid":"a1b2c3"}
+
+nonce     = feedface0000000000000002
+ciphertext =
+    f111c0a217756b5f967108e32ce392d6
+    2f4de9380b2267c53b81cc4679bc59
+tag       =
+    5b64d39058d1bb23e2cec5f9c69880e1
+
+body (base64) =
+    /u36zgAAAAAAAAAC8RHAohd1a1+WcQjjLOOS1i9N6TgLImfFO4H
+    MRnm8WVtk05BY0bsj4s7F+caYgOE=
+</pre><a href="#appendix-B.4-4" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-C">
+      <h2 id="name-authors-address">
+<a href="#name-authors-address" class="section-name selfRef">Author's Address</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Vitaliy Vasylenko</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:ietf@vitalvas.com" class="email">ietf@vitalvas.com</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
